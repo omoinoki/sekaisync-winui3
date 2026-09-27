@@ -1,0 +1,493 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="SekaiSync.Desktop.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:SekaiSync.Desktop.Models"
+    xmlns:controls="using:SekaiSync.Desktop.Controls"
+    mc:Ignorable="d">
+
+    <!--
+      四行：标题栏 / 内容（含任务输出停靠区）/ 状态明细（可折叠）/ 常驻状态条。
+      状态条放在 NavigationView 之外，这样它才横跨整个窗体宽度，不被左侧导航栏截断；
+      停靠区相反，放在 NavigationView 的内容区里，只贴右侧面板，不压导航列。
+
+      Signal Stage 落点（ux-handbook §3–4）：
+      · 品牌装饰只有一处——导航选中色；标题栏与状态条不放装饰图形。
+      · 次要文字用 SkInkMuted 配对色，全文件不再出现 Opacity。
+      · 同步率档位同时有颜色与文字，未评估时不画 0% 的条（§6 / A-03）。
+      · 停靠区上边框是实色细线：它把「页面内容」和「全应用输出」硬切成两块。
+    -->
+    <Grid x:Name="RootGrid" KeyDown="RootGrid_KeyDown" SizeChanged="RootGrid_SizeChanged">
+        <Grid.RowDefinitions>
+            <!-- 标题栏 48 / 内容自适应 / 明细自适应 / 状态条 40：数值走尺寸令牌，不再散落字面量。 -->
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="40" />
+        </Grid.RowDefinitions>
+
+        <controls:DiagonalDriftBackdrop x:Name="BackgroundDrift" Grid.RowSpan="4"
+            AutomationProperties.AccessibilityView="Raw" IsHitTestVisible="False" />
+
+        <!-- 标题栏拖拽区（ExtendsContentIntoTitleBar 在代码里设置）。
+             产品名定名 SekaiSync Desktop，"for Windows" 只作后缀（细体）；
+             左侧放派生单色 logo（logo-mono-ink-*，
+             按主题切换资源，对比主题退回纯文字——手册 §3.5/C.11）。 -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="48">
+            <StackPanel
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="16,0,0,0"
+                Spacing="10">
+                <Border Width="20" Height="20" AutomationProperties.AccessibilityView="Raw">
+                    <Viewbox>
+                        <Path
+                            x:Name="TitleBarLogo"
+                            Data="M915 238C831 170 735 135 633 133C440 125 275 232 194 411C135 542 137 693 194 825Q204 851 230 841L263 825Q288 814 277 789C205 615 234 450 349 333C485 192 692 177 851 299L824 329Q809 349 827 358L956 393Q989 407 986 373L975 235Q974 201 950 214Z M982 457C1056 632 1019 787 907 883C771 1026 566 1038 412 933L438 907Q453 891 433 878L311 846Q280 836 282 866L287 1005Q288 1038 312 1024L345 998C528 1137 774 1121 947 967C1108 823 1150 683 1070 432Q1061 394 1040 398Q1033 398 1023 403L997 416Q974 427 982 457Z M457 437H807L882 512V742L806 817H460L377 736V514Z M454 608L481 630L453 654C460 677 476 690 496 690C523 690 543 664 543 631C543 599 523 573 497 573C477 573 462 586 454 608Z M719 608L746 630L717 654C725 677 740 690 761 690C788 690 808 664 808 631C808 599 788 573 762 573C742 573 727 586 719 608Z"
+                            Fill="{ThemeResource SkInkBrush}"
+                            Stretch="Uniform" />
+                    </Viewbox>
+                </Border>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource SkInkBrush}"
+                    FontSize="14">
+                    <!-- 主名 SemiBold、"for Windows" 作后缀走细体；两段必须在同一行，
+                         XAML 会在元素间吞空白，换行写就把中间那个空格丢了。 -->
+                    <Run Text="SekaiSync Desktop" FontWeight="SemiBold" /><Run Text=" for Windows" FontWeight="Light" />
+                </TextBlock>
+            </StackPanel>
+        </Grid>
+
+        <NavigationView
+            x:Name="NavView"
+            Grid.Row="1"
+            PaneDisplayMode="Auto"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            OpenPaneLength="200"
+            Background="Transparent"
+            SelectionChanged="NavView_SelectionChanged">
+
+            <!-- 每个导航项的说明原先只在 ToolTip 里，Narrator 读不到（WinUI 官方：ToolTip 不是
+                 可访问名称/描述）。HelpText 让同一段话进入控制视图，ToolTip 保留给鼠标。 -->
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    Tag="news"
+                    Content="资讯"
+                    AutomationProperties.HelpText="官方公告，来自两个实例的 JSON，按语言分档"
+                    ToolTipService.ToolTip="官方公告（来自两个实例的 JSON，按语言分档）">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE789;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItemSeparator />
+
+                <NavigationViewItem
+                    Tag="story"
+                    Content="剧情"
+                    AutomationProperties.HelpText="有标题的叙事单元：活动 / 卡牌 / 组合 / 特别 / 虚拟 Live"
+                    ToolTipService.ToolTip="有标题的叙事单元：活动 / 卡牌 / 组合 / 特别 / 虚拟 Live">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE736;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    Tag="voices"
+                    Content="台词"
+                    AutomationProperties.HelpText="主页语音 / 区域对话 / 我的世界 / 自我介绍"
+                    ToolTipService.ToolTip="主页语音 / 区域对话 / 我的世界 / 自我介绍">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8D2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    Tag="terms"
+                    Content="用语"
+                    AutomationProperties.HelpText="术语 / 提取用语 / 官方译名三合一"
+                    ToolTipService.ToolTip="术语 / 提取用语 / 官方译名三合一">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE82D;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    Tag="entities"
+                    Content="实体"
+                    AutomationProperties.HelpText="角色 / 卡牌 / 活动 / 音乐等 12 个资产域"
+                    ToolTipService.ToolTip="角色 / 卡牌 / 活动 / 音乐等 12 个资产域">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8F1;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem
+                    Tag="sources"
+                    Content="数据源"
+                    AutomationProperties.HelpText="知识库概览 / 原始表 / 实例对比"
+                    ToolTipService.ToolTip="知识库概览 / 原始表 / 实例对比">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+            </NavigationView.MenuItems>
+
+            <!-- 同步与智能体接入是「运维侧」的页：放在侧栏下端吸附区，与上方「阅览侧」的
+                 数据内容分开，并且用同一条分割线把「接入」和「设置」隔开（资讯/剧情之间同款）。 -->
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem
+                    Tag="sync"
+                    Content="同步"
+                    AutomationProperties.HelpText="Master / 公告 / 正文同步"
+                    ToolTipService.ToolTip="Master / 公告 / 正文同步">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE895;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem
+                    Tag="agent"
+                    Content="智能体接入"
+                    AutomationProperties.HelpText="MCP / HTTP 服务与 Agent 配置"
+                    ToolTipService.ToolTip="MCP / HTTP 服务与 Agent 配置">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE99A;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItemSeparator />
+
+                <NavigationViewItem Tag="settings" Content="设置">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <!-- 底部留白由 Frame 的下外边距给，好让停靠区能贴住内容区底边，不被这层 Padding 顶开。
+                 停靠区那一行必须是 Auto：给它固定高度，那么在本页隐藏停靠区时这一行照样占位，
+                 等于把 200 dip 空白摊到所有页面上（实测用语页整页内容被顶窄顶短）。
+                 高度改由代码写在元素自身上，隐藏时 Collapsed 自然归零。 -->
+            <Grid Padding="16,8,16,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Spacing="8">
+                    <!-- 顶层常驻上下文：没有本地库时，各页的「空列表」都读作「库里没有」。
+                         这句话按 §6 契约写：事实 + 影响 + 下一步，并给出去设置的动作。 -->
+                    <InfoBar
+                        Severity="Warning"
+                        Title="没有可阅览的本地库"
+                        IsOpen="{x:Bind Shell.IsStoreMissing, Mode=OneWay}"
+                        IsClosable="False"
+                        Message="{x:Bind Shell.StoreMissingText, Mode=OneWay}">
+                        <InfoBar.ActionButton>
+                            <Button
+                                Content="选择本地库"
+                                Click="GoToSettingsPage_Click" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <InfoBar
+                        x:Name="CrashInfoBar"
+                        Severity="Error"
+                        Title="发生未处理的异常"
+                        IsOpen="False"
+                        IsClosable="True">
+                        <InfoBar.Content>
+                            <StackPanel Spacing="8">
+                                <TextBlock
+                                    x:Name="CrashMessageText"
+                                    Style="{StaticResource SkBodyTextStyle}"
+                                    IsTextSelectionEnabled="True" />
+                                <TextBlock
+                                    x:Name="CrashNoteText"
+                                    Text="界面里的主目录与凭证形态已隐去；完整原始记录在诊断日志中，对外分享前请自行检查。"
+                                    Style="{StaticResource SkMutedTextStyle}" />
+                            </StackPanel>
+                        </InfoBar.Content>
+                        <InfoBar.ActionButton>
+                            <Button
+                                x:Name="OpenLogButton"
+                                Content="打开诊断日志"
+                                Click="OpenLogButton_Click"
+                                AutomationProperties.HelpText="用系统默认程序打开 %TEMP%\sekaisync_desktop.log" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                </StackPanel>
+
+                <Frame x:Name="ContentFrame" Grid.Row="1" Background="Transparent" Margin="0,0,0,12" />
+
+                <!-- 停靠区的拉拽条：底边那条实线就是「页面内容 / 全应用输出」的硬分割，
+                     条本身是 12 dip 的抓取区，中间一枚小把手提示可拖。
+                     用 ContentControl 而不是 Border：它才是 Control，能 Tab 聚焦、能吃上下方向键。 -->
+                <ContentControl x:Name="DockResizer" Grid.Row="2" Height="12" Margin="-16,0,-16,0"
+                                IsTabStop="True" HorizontalContentAlignment="Stretch"
+                                Background="Transparent" BorderThickness="0"
+                                PreviewKeyDown="DockResizer_PreviewKeyDown"
+                                PointerPressed="DockResizer_PointerPressed"
+                                PointerMoved="DockResizer_PointerMoved"
+                                PointerReleased="DockResizer_PointerReleased"
+                                PointerCaptureLost="DockResizer_PointerCaptureLost"
+                                DoubleTapped="DockResizer_DoubleTapped"
+                                Visibility="{x:Bind BoolToVisibility(Shell.IsConsoleVisible), Mode=OneWay}"
+                                AutomationProperties.Name="调整任务输出停靠区高度"
+                                AutomationProperties.HelpText="拖动或用上下方向键改变停靠区高度；双击恢复默认。">
+                    <Grid>
+                        <Border Height="1" VerticalAlignment="Bottom" Background="{ThemeResource SkHairlineBrush}" />
+                        <Rectangle Width="34" Height="3" RadiusX="1.5" RadiusY="1.5"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Fill="{ThemeResource SkHairlineBrush}" />
+                    </Grid>
+                </ContentControl>
+
+                <!-- 任务输出停靠区：全应用共享的一份输出，只在同步 / 智能体接入两页可见。
+                     原先这两页各画一个控制台，切页时面板重画、分隔线也跟着跳；收进 shell 后是同一块。
+                     挂在 NavigationView 的内容区里而不是窗体根上，所以它只贴右侧面板，不压左侧导航列；
+                     左右负外边距是用来抵消内容容器那 16 dip 内衬，让实色分隔线铺满面板宽。 -->
+                <Grid x:Name="ConsoleDock" Grid.Row="3" RowSpacing="8" ColumnSpacing="12"
+                      Margin="-16,0,-16,0" Padding="16,10,16,12"
+                      Background="{ThemeResource SkSurfaceBrush}"
+                      Visibility="{x:Bind BoolToVisibility(Shell.IsConsoleVisible), Mode=OneWay}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Bind Shell.ConsoleScopeRow, Mode=OneTime}"
+                               Style="{StaticResource SkBodyTextStyle}" VerticalAlignment="Center"
+                               ToolTipService.ToolTip="显示全应用最近的任务输出；同步页与智能体接入页看到的是同一份。" />
+
+                    <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource SkPanelStyle}" Padding="4">
+                        <TextBox x:Name="ConsoleBox" Style="{StaticResource SkWorkspaceTextBoxStyle}" VerticalAlignment="Stretch"
+                                 IsReadOnly="True" AcceptsReturn="True" Text="{x:Bind Shell.Bus.OutputText, Mode=OneWay}"
+                                 PlaceholderText="{x:Bind Shell.ConsolePlaceholder, Mode=OneWay}"
+                                 TextWrapping="NoWrap" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                                 FontFamily="Consolas" MaxLength="0" IsTabStop="True"
+                                 AutomationProperties.Name="任务输出控制台" AutomationProperties.HelpText="新输出跟随到底部；上翻时保持阅读位置。"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                 BorderThickness="0" Background="Transparent" />
+                    </Border>
+
+                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8" VerticalAlignment="Top" Width="140">
+                        <Button Content="复制输出" Command="{x:Bind Shell.CopyLogCommand}" HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="复制输出（脱敏）"
+                                ToolTipService.ToolTip="复制时移除用户名路径与凭证形态。" />
+                        <Button Content="另存输出…" Command="{x:Bind Shell.SaveLogCommand}" HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="另存输出为文件（脱敏）"
+                                ToolTipService.ToolTip="选择保存位置；取消选择不写入。" />
+                        <Button Content="清空…" Click="ClearOutput_Click" HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="清空当前视图"
+                                ToolTipService.ToolTip="确认后清空共享输出，不删除本机日志文件。" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </NavigationView>
+
+        <!-- 同步率明细（点状态条左侧标签展开） -->
+        <Border
+            Grid.Row="2"
+            Visibility="{x:Bind Shell.IsDetailOpen, Mode=OneWay}"
+            Background="{ThemeResource SkSurfaceBrush}"
+            BorderBrush="{ThemeResource SkHairlineBrush}"
+            BorderThickness="0,1,0,0"
+            Padding="16,12"
+            AutomationProperties.Name="同步率明细">
+            <Grid RowSpacing="12" ColumnSpacing="24" MaxHeight="320">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel
+                    Grid.Row="0"
+                    Grid.ColumnSpan="2"
+                    Orientation="Horizontal"
+                    Spacing="12">
+                    <TextBlock Text="同步率明细" Style="{StaticResource SkSectionTextStyle}" VerticalAlignment="Center" />
+                    <TextBlock
+                        Text="{x:Bind Shell.GeneratedLabel, Mode=OneWay}"
+                        Style="{StaticResource SkMutedTextStyle}"
+                        VerticalAlignment="Center" />
+                    <Button
+                        Content="关闭"
+                        HorizontalAlignment="Right"
+                        Click="CloseProgressDetail_Click"
+                        AutomationProperties.HelpText="按 Esc 也可收起本面板" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="6" MinWidth="260">
+                    <TextBlock Text="五服分档" Style="{StaticResource SkSectionTextStyle}" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="150">
+                        <ItemsControl ItemsSource="{x:Bind Shell.Regions, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:RegionProgress">
+                                    <Grid Margin="0,2,0,2" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="48" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind Label}" Style="{StaticResource SkTableCellSecondaryTextStyle}" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind OverallPct}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind Detail}" Style="{StaticResource SkTableCellSecondaryTextStyle}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
+                <Grid Grid.Row="1" Grid.Column="1" RowSpacing="6">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="{x:Bind Shell.GapsHeader, Mode=OneWay}" Style="{StaticResource SkSectionTextStyle}" />
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="150">
+                        <ItemsControl ItemsSource="{x:Bind Shell.Gaps, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:CategoryGap">
+                                    <Grid Margin="0,2,0,2" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="56" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="48" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind Region}" Style="{StaticResource SkTableCellSecondaryTextStyle}" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind DisplayName}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind Pct}" Style="{StaticResource SkTableCellTextStyle}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="2" Spacing="4">
+                        <TextBlock
+                            Text="{x:Bind Shell.StoreContextText, Mode=OneWay}"
+                            Style="{StaticResource SkMutedTextStyle}"
+                            IsTextSelectionEnabled="True" />
+                        <TextBlock
+                            Text="{x:Bind Shell.CrawlLockText, Mode=OneWay}"
+                            Style="{StaticResource SkWarningTextStyle}"
+                            Visibility="{x:Bind BoolToVisibility(Shell.HasCrawlLockNotice), Mode=OneWay}" />
+                        <TextBlock
+                            Text="{x:Bind Shell.SourceUnavailableLabel, Mode=OneWay}"
+                            Style="{StaticResource SkMutedTextStyle}"
+                            Visibility="{x:Bind BoolToVisibility(Shell.HasSourceUnavailable), Mode=OneWay}" />
+                        <TextBlock Text="{x:Bind Shell.DetailLabel, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}" />
+                        <!-- 缺口要能变成动作：跳同步页，由那里的前置清单与 TOS 勾选接手（§5.3）。 -->
+                        <Button
+                            Content="到同步页处理这些缺口"
+                            HorizontalAlignment="Left"
+                            Click="GoToSyncPage_Click"
+                            AutomationProperties.HelpText="打开同步页，选择区服与数据层后发起；正文抓取需在同步页确认条款" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- 常驻底部状态条 -->
+        <Grid
+            Grid.Row="3"
+            BorderBrush="{ThemeResource SkHairlineBrush}"
+            BorderThickness="0,1,0,0"
+            Background="{ThemeResource SkSurfaceBrush}"
+            Padding="16,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ToggleButton：展开状态要能通过 Toggle 模式被读屏播报，Button 做不到。 -->
+            <ToggleButton
+                Grid.Column="0"
+                Margin="0,6,12,6"
+                Padding="10,4"
+                IsChecked="{x:Bind Shell.IsDetailOpen, Mode=TwoWay}"
+                AutomationProperties.Name="同步率明细"
+                AutomationProperties.HelpText="展开查看五服分档与缺口定位"
+                ToolTipService.ToolTip="{x:Bind Shell.DetailLabel, Mode=OneWay}">
+                <TextBlock
+                    Text="{x:Bind Shell.BarLabelWithBand, Mode=OneWay}"
+                    FontSize="13"
+                    VerticalAlignment="Center" />
+            </ToggleButton>
+
+            <!-- 档位色只在 XAML 里由 {ThemeResource} 决定：三根条同格叠放，按档位显示其一。
+                 WinUI 3 没有 DataTrigger，这样写比在 C# 里 new SolidColorBrush 更可靠
+                 （主题切换与高对比由框架负责）。 -->
+            <Grid Grid.Column="1" VerticalAlignment="Center">
+                <ProgressBar
+                    Height="4"
+                    Visibility="{x:Bind BoolToVisibility(Shell.IsBandHigh), Mode=OneWay}"
+                    Maximum="{x:Bind Shell.ProgressMaximum, Mode=OneWay}"
+                    Value="{x:Bind Shell.ProgressValue, Mode=OneWay}"
+                    Foreground="{ThemeResource SkSuccessBrush}"
+                    AutomationProperties.Name="{x:Bind Shell.ProgressBarName, Mode=OneWay}" />
+                <ProgressBar
+                    Height="4"
+                    Visibility="{x:Bind BoolToVisibility(Shell.IsBandMid), Mode=OneWay}"
+                    Maximum="{x:Bind Shell.ProgressMaximum, Mode=OneWay}"
+                    Value="{x:Bind Shell.ProgressValue, Mode=OneWay}"
+                    Foreground="{ThemeResource SkActionBrush}"
+                    AutomationProperties.Name="{x:Bind Shell.ProgressBarName, Mode=OneWay}" />
+                <ProgressBar
+                    Height="4"
+                    Visibility="{x:Bind BoolToVisibility(Shell.IsBandLow), Mode=OneWay}"
+                    Maximum="{x:Bind Shell.ProgressMaximum, Mode=OneWay}"
+                    Value="{x:Bind Shell.ProgressValue, Mode=OneWay}"
+                    Foreground="{ThemeResource SkWarningBrush}"
+                    AutomationProperties.Name="{x:Bind Shell.ProgressBarName, Mode=OneWay}" />
+                <!-- 未评估时不画 0%：那会被读成「一点都没同步」。 -->
+                <TextBlock
+                    Text="{x:Bind Shell.Snapshot.StatusText, Mode=OneWay}"
+                    Style="{StaticResource SkMutedTextStyle}"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind BoolToVisibility(Shell.IsUnrated), Mode=OneWay}" />
+            </Grid>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+                <TextBlock
+                    Text="{x:Bind Shell.BusyText, Mode=OneWay}"
+                    Style="{StaticResource SkMutedTextStyle}"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Visibility="{x:Bind BoolToVisibility(Shell.IsBusy), Mode=OneWay}" />
+                <Button
+                    Content="重新评估"
+                    Command="{x:Bind Shell.RefreshProgressCommand}"
+                    IsEnabled="{x:Bind Shell.CanRun, Mode=OneWay}"
+                    Padding="10,5"
+                    AutomationProperties.HelpText="运行 sekaisync progress 重算 progress.json；任务运行中不可用" />
+                <Button
+                    Content="同步"
+                    Click="GoToSyncPage_Click"
+                    Padding="10,5"
+                    AutomationProperties.Name="到同步页"
+                    AutomationProperties.HelpText="打开同步页，选择任务与区服后发起" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

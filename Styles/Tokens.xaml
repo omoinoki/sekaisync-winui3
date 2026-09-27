@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  Signal Stage 语义色板。数值逐项对应 ux-handbook/tokens.json 的 modes.light / modes.dark。
+
+  取色规则（手册 §3.2）：页面只按语义角色取 Sk* 资源，不写十六进制；
+  需要「次要文字」时用 SkInkMutedBrush，**不要用 Opacity**（低透明度不能替代配对色）。
+  HighContrast 档一律映射系统语义色，保住品牌色不是目标（§3.2 / constraints.forcedColors）。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ══ 与主题无关的度量 ══
+         CSS 值只是样张口径，原生客户端按逻辑单位（DIP）取数，不乘 DPI（constraints.units）。
+         尺寸类令牌集中在 Styles/Sizing.xaml。 -->
+    <x:Double x:Key="SkSpace1">4</x:Double>
+    <x:Double x:Key="SkSpace2">8</x:Double>
+    <x:Double x:Key="SkSpace3">12</x:Double>
+    <x:Double x:Key="SkSpace4">16</x:Double>
+    <x:Double x:Key="SkSpace6">24</x:Double>
+    <x:Double x:Key="SkSpace8">32</x:Double>
+    <x:Double x:Key="SkSpace12">48</x:Double>
+    <SolidColorBrush x:Key="SkFragmentCyanBrush" Color="#7FF3ED" />
+    <SolidColorBrush x:Key="SkFragmentPinkBrush" Color="#F4A5E7" />
+    <SolidColorBrush x:Key="SkFragmentLemonBrush" Color="#FBF78B" />
+
+    <!-- ══ 品牌装饰：节奏几何（手册 §3.1「只在欢迎区、章节页、空态边缘放一处原创节奏场」）══
+         斜线用原创的短斜杠节奏，不描摹游戏 UI、不使用官方素材；仅作装饰，
+         不得承载状态含义，也不得穿过表格/表单/警告/焦点环。 -->
+    <LinearGradientBrush x:Key="SkBrandGradientBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0" Color="{ThemeResource SkActionColor}" />
+        <GradientStop Offset="1" Color="{ThemeResource SkAccentColor}" />
+    </LinearGradientBrush>
+
+    <!-- 标题下的横贯细线：青 → 粉 → 淡出。收尾用带 alpha 的同色（WinUI 3 的 GradientStop
+         没有 StopOpacity，透明度必须写在颜色里），让线「走掉」而不是被硬切断。
+         这是 Signal Stage 里「节拍在边缘」的做法，不描摹任何游戏界面元素。 -->
+    <LinearGradientBrush x:Key="SkBrandRuleBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0" Color="{ThemeResource SkActionColor}" />
+        <GradientStop Offset="0.22" Color="{ThemeResource SkAccentColor}" />
+        <GradientStop Offset="0.55" Color="{ThemeResource SkBrandRuleFadeColor}" />
+        <GradientStop Offset="1" Color="{ThemeResource SkBrandRuleEndColor}" />
+    </LinearGradientBrush>
+
+    <!-- 内容面板圆角 12；自绘小标签 6。原生按钮/对话框/菜单保持原生圆角（手册 §3.3）。 -->
+    <CornerRadius x:Key="SkPanelCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="SkChipCornerRadius">6</CornerRadius>
+
+    <!-- 动效时长（秒）：反馈 100–160ms，局部面板 220ms。
+         Storyboard 的 Duration 用秒数表达，故此处不用 ms 字符串。 -->
+    <x:Double x:Key="SkMotionFastSeconds">0.1</x:Double>
+    <x:Double x:Key="SkMotionFeedbackSeconds">0.16</x:Double>
+    <x:Double x:Key="SkMotionPanelSeconds">0.22</x:Double>
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ── 浅色：冷白工作纸面 ── -->
+        <ResourceDictionary x:Key="Light">
+            <!-- 裸色值：供渐变等需要 Color（而非 Brush）的场合取用。 -->
+            <Color x:Key="SkActionColor">#006F78</Color>
+            <Color x:Key="SkAccentColor">#AC246D</Color>
+            <Color x:Key="SkSignalPinkColor">#F26DB0</Color>
+            <Color x:Key="SkBrandRuleFadeColor">#59F26DB0</Color>
+            <Color x:Key="SkBrandRuleEndColor">#00F26DB0</Color>
+            <SolidColorBrush x:Key="SkCanvasBrush" Color="#F4F7FA" />
+            <SolidColorBrush x:Key="SkSurfaceBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SkSurfaceMutedBrush" Color="#EAF0F5" />
+            <SolidColorBrush x:Key="SkInkBrush" Color="#17263B" />
+            <SolidColorBrush x:Key="SkInkMutedBrush" Color="#4F6175" />
+            <SolidColorBrush x:Key="SkBorderBrush" Color="#7A8B9B" />
+            <SolidColorBrush x:Key="SkHairlineBrush" Color="#D5E1E8" />
+            <SolidColorBrush x:Key="SkActionBrush" Color="#006F78" />
+            <SolidColorBrush x:Key="SkActionHoverBrush" Color="#005963" />
+            <SolidColorBrush x:Key="SkOnActionBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SkSelectionBrush" Color="#DDF7F7" />
+            <SolidColorBrush x:Key="SkOnSelectionBrush" Color="#005963" />
+            <SolidColorBrush x:Key="SkAccentBrush" Color="#AC246D" />
+            <SolidColorBrush x:Key="SkAccentSoftBrush" Color="#FFEAF4" />
+            <SolidColorBrush x:Key="SkFocusBrush" Color="#004EC2" />
+            <SolidColorBrush x:Key="SkSuccessBrush" Color="#21633F" />
+            <SolidColorBrush x:Key="SkSuccessSoftBrush" Color="#E8F5EC" />
+            <SolidColorBrush x:Key="SkWarningBrush" Color="#805100" />
+            <SolidColorBrush x:Key="SkWarningSoftBrush" Color="#FFF2D5" />
+            <SolidColorBrush x:Key="SkDangerBrush" Color="#B4233A" />
+            <SolidColorBrush x:Key="SkDangerSoftBrush" Color="#FFEAEF" />
+            <SolidColorBrush x:Key="SkUnknownBrush" Color="#536074" />
+            <SolidColorBrush x:Key="SkUnknownSoftBrush" Color="#EDF0F5" />
+            <!-- signal-cyan / signal-pink：仅装饰，不用于文字、焦点或必要图形。 -->
+            <SolidColorBrush x:Key="SkSignalCyanBrush" Color="#21D8D0" />
+            <SolidColorBrush x:Key="SkSignalPinkBrush" Color="#F26DB0" />
+        </ResourceDictionary>
+
+        <!-- ── 深色：墨蓝工作台 ── -->
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="SkActionColor">#68E2DD</Color>
+            <Color x:Key="SkAccentColor">#FFA5D3</Color>
+            <Color x:Key="SkSignalPinkColor">#F26DB0</Color>
+            <Color x:Key="SkBrandRuleFadeColor">#59FFA5D3</Color>
+            <Color x:Key="SkBrandRuleEndColor">#00FFA5D3</Color>
+            <SolidColorBrush x:Key="SkCanvasBrush" Color="#101824" />
+            <SolidColorBrush x:Key="SkSurfaceBrush" Color="#182335" />
+            <SolidColorBrush x:Key="SkSurfaceMutedBrush" Color="#223148" />
+            <SolidColorBrush x:Key="SkInkBrush" Color="#EDF4FF" />
+            <SolidColorBrush x:Key="SkInkMutedBrush" Color="#A8BAD0" />
+            <SolidColorBrush x:Key="SkBorderBrush" Color="#71849C" />
+            <SolidColorBrush x:Key="SkHairlineBrush" Color="#3C4B60" />
+            <SolidColorBrush x:Key="SkActionBrush" Color="#68E2DD" />
+            <SolidColorBrush x:Key="SkActionHoverBrush" Color="#93EEE9" />
+            <SolidColorBrush x:Key="SkOnActionBrush" Color="#0D252C" />
+            <SolidColorBrush x:Key="SkSelectionBrush" Color="#143C43" />
+            <SolidColorBrush x:Key="SkOnSelectionBrush" Color="#93EEE9" />
+            <SolidColorBrush x:Key="SkAccentBrush" Color="#FFA5D3" />
+            <SolidColorBrush x:Key="SkAccentSoftBrush" Color="#3F2339" />
+            <SolidColorBrush x:Key="SkFocusBrush" Color="#FFD166" />
+            <SolidColorBrush x:Key="SkSuccessBrush" Color="#9BE6B5" />
+            <SolidColorBrush x:Key="SkSuccessSoftBrush" Color="#173A2A" />
+            <SolidColorBrush x:Key="SkWarningBrush" Color="#FFD489" />
+            <SolidColorBrush x:Key="SkWarningSoftBrush" Color="#3D3017" />
+            <SolidColorBrush x:Key="SkDangerBrush" Color="#FFB0BD" />
+            <SolidColorBrush x:Key="SkDangerSoftBrush" Color="#48232F" />
+            <SolidColorBrush x:Key="SkUnknownBrush" Color="#BCCAE0" />
+            <SolidColorBrush x:Key="SkUnknownSoftBrush" Color="#293347" />
+            <SolidColorBrush x:Key="SkSignalCyanBrush" Color="#21D8D0" />
+            <SolidColorBrush x:Key="SkSignalPinkBrush" Color="#F26DB0" />
+        </ResourceDictionary>
+
+        <!-- ── 强制色 / 高对比：全部退回系统语义色，装饰消失 ── -->
+        <ResourceDictionary x:Key="HighContrast">
+            <!-- 强制色下仅隐藏装饰渐变，文字、边界与焦点仍使用系统色。 -->
+            <Color x:Key="SkActionColor">#00000000</Color>
+            <Color x:Key="SkAccentColor">#00000000</Color>
+            <Color x:Key="SkSignalPinkColor">#00000000</Color>
+            <Color x:Key="SkBrandRuleFadeColor">#00000000</Color>
+            <Color x:Key="SkBrandRuleEndColor">#00000000</Color>
+            <SolidColorBrush x:Key="SkCanvasBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkSurfaceMutedBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="SkInkBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkInkMutedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkHairlineBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkActionBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="SkActionHoverBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="SkOnActionBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkSelectionBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SkOnSelectionBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="SkAccentBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkAccentSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkFocusBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <!-- 语义状态在高对比下仍靠文字区分，色对交给系统前景。 -->
+            <SolidColorBrush x:Key="SkSuccessBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkSuccessSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkWarningBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkWarningSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkDangerBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkDangerSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkUnknownBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SkUnknownSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkSignalCyanBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SkSignalPinkBrush" Color="{ThemeResource SystemColorWindowColor}" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

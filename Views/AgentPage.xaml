@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SekaiSync.Desktop.Views.AgentPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowSpacing="12" SizeChanged="Workspace_SizeChanged">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <StackPanel>
+                <TextBlock Text="智能体接入" Style="{StaticResource SkWorkspaceHeadingStyle}" />
+                <Border Style="{StaticResource SkHeadingRuleStyle}" />
+            </StackPanel>
+            <TextBlock Text="选择客户端支持的连接方式" Style="{StaticResource SkBodyTextStyle}" />
+            <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}"
+                       Visibility="{x:Bind TextVisibility(ViewModel.StatusText), Mode=OneWay}"
+                       AutomationProperties.Name="接入操作回执" AutomationProperties.LiveSetting="Polite" />
+        </StackPanel>
+
+        <!-- 窄窗口改为单列；连接卡片吃掉标题以下的全部高度，输出控制台在 shell 的停靠区。 -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="8">
+                <Grid x:Name="ConnectionCards" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition x:Name="HttpColumn" Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Style="{StaticResource SkPanelStyle}" Padding="16" VerticalAlignment="Top">
+                        <StackPanel Spacing="8">
+                            <!-- 标题与副标题仍按原来的 8 dip 间距走，复制键浮到右上角，不插进文字流里。 -->
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="8" VerticalAlignment="Top">
+                                    <TextBlock Text="本地 MCP 配置" Style="{StaticResource SkStrongTextStyle}" />
+                                    <TextBlock Text="stdio · 由客户端启动本地进程" Style="{StaticResource SkBodyTextStyle}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="复制配置 JSON" Style="{StaticResource SkWorkspaceAccentButtonStyle}"
+                                        VerticalAlignment="Top"
+                                        Command="{x:Bind ViewModel.CopyStdioConfigCommand}"
+                                        AutomationProperties.Name="复制 MCP stdio 配置 JSON"
+                                        AutomationProperties.HelpText="只复制到剪贴板；粘贴到客户端后重新加载并检查连接。" />
+                            </Grid>
+                            <TextBox x:Name="JsonPreview" Text="{x:Bind ViewModel.StdioConfigJson, Mode=OneWay}"
+                                     Style="{StaticResource SkWorkspaceTextBoxStyle}"
+                                     IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                                     IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                                     MaxHeight="160" FontFamily="Consolas"
+                                     AutomationProperties.Name="MCP stdio 配置预览"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="HttpCard" Grid.Column="1" Style="{StaticResource SkPanelStyle}" Padding="16" VerticalAlignment="Top">
+                        <StackPanel Spacing="8">
+                            <!-- 无认证提示并到标题同行右对齐：它是对这张卡的一句话限定，不该另占一行。 -->
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="本地 HTTP 服务" Style="{StaticResource SkStrongTextStyle}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.NoAuthNotice, Mode=OneWay}"
+                                           Style="{StaticResource SkBodyTextStyle}" TextAlignment="Right"
+                                           TextWrapping="Wrap" VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{x:Bind ViewModel.HttpBaseUrl, Mode=OneWay}" Style="{StaticResource SkWorkspaceTextBoxStyle}"
+                                         IsReadOnly="True" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                                         AutomationProperties.Name="HTTP 服务基址" />
+                                <Button Grid.Column="1" Content="复制地址" Style="{StaticResource SkWorkspaceButtonStyle}"
+                                        IsEnabled="{x:Bind ViewModel.CanCopyBaseUrl, Mode=OneWay}" Command="{x:Bind ViewModel.CopyHttpBaseCommand}"
+                                        AutomationProperties.Name="复制服务基址" AutomationProperties.HelpText="只允许复制本机回环地址。" />
+                            </Grid>
+                            <!-- 启停合一：运行中这个键就是「停止服务」，所以两列等宽就够，不再留中间的独立停止键。 -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Style="{StaticResource SkWorkspaceAccentButtonStyle}" HorizontalAlignment="Stretch"
+                                        IsEnabled="{x:Bind ViewModel.CanToggleService, Mode=OneWay}" Command="{x:Bind ViewModel.ToggleServiceCommand}"
+                                        AutomationProperties.Name="{x:Bind ViewModel.ServiceToggleName, Mode=OneWay}"
+                                        AutomationProperties.HelpText="{x:Bind ViewModel.ServiceToggleHelpText, Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind ViewModel.ServiceToggleLabel, Mode=OneWay}" TextWrapping="Wrap" TextAlignment="Center" />
+                                </Button>
+                                <Button Grid.Column="1" Style="{StaticResource SkWorkspaceButtonStyle}" HorizontalAlignment="Stretch"
+                                        IsEnabled="{x:Bind ViewModel.CanCheckHealth, Mode=OneWay}" Command="{x:Bind ViewModel.CheckHealthCommand}"
+                                        AutomationProperties.Name="检查本地服务健康状态" AutomationProperties.HelpText="请求 /health，3 秒超时；服务运行时仍可检查。">
+                                    <TextBlock Text="健康检查" TextWrapping="Wrap" TextAlignment="Center" />
+                                </Button>
+                            </Grid>
+                            <TextBlock Text="{x:Bind ServiceStateLabel(ViewModel.ServiceRunning, ViewModel.Bus.CancelRequested), Mode=OneWay}"
+                                       Style="{StaticResource SkBodyTextStyle}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock Text="{x:Bind ViewModel.ServiceSlotText, Mode=OneWay}"
+                                       Visibility="{x:Bind ShowOtherTask(ViewModel.IsBusBusy, ViewModel.ServiceRunning), Mode=OneWay}"
+                                       Style="{StaticResource SkBodyTextStyle}" AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock Text="最近健康检查" Style="{StaticResource SkSectionTextStyle}" />
+                            <Grid ColumnSpacing="8" RowSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="服务" Style="{StaticResource SkBodyTextStyle}" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.ServiceText, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}"
+                                           AutomationProperties.LiveSetting="Polite" />
+                                <TextBlock Grid.Row="1" Text="数据" Style="{StaticResource SkBodyTextStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.DataText, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}"
+                                           AutomationProperties.LiveSetting="Polite" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <InfoBar IsOpen="{x:Bind ViewModel.ShowNonLoopbackWarning, Mode=OneWay}"
+                         Visibility="{x:Bind BoolToVisibility(ViewModel.ShowNonLoopbackWarning), Mode=OneWay}"
+                         Severity="Warning" Title="{x:Bind ViewModel.HostNoticeTitle, Mode=OneWay}"
+                         Message="{x:Bind ViewModel.HostNoticeMessage, Mode=OneWay}" IsClosable="False" />
+
+                <Button Content="帮助" HorizontalAlignment="Right" MinWidth="120"
+                        Click="Help_Click"
+                        AutomationProperties.HelpText="打开二级窗口查看两种连接方式怎么接、启动后会做什么，以及端点与命令行。"
+                        ToolTipService.ToolTip="查看接入说明与端点清单" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

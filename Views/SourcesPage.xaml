@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SekaiSync.Desktop.Views.SourcesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:SekaiSync.Desktop.Controls"
+    xmlns:models="using:SekaiSync.Desktop.Models"
+    xmlns:vm="using:SekaiSync.Desktop.ViewModels"
+    mc:Ignorable="d">
+
+    <Grid RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="0">
+            <TextBlock Text="数据源" Style="{StaticResource SkWorkspaceHeadingStyle}" />
+            <Border Style="{StaticResource SkHeadingRuleStyle}" />
+        </StackPanel>
+
+        <controls:WrapPanel Grid.Row="1" RowSpacing="8" ColumnSpacing="16" AutomationProperties.Name="数据源视图标签">
+            <RadioButton
+                GroupName="SourceTabs" Content="概览" MinWidth="0"
+                Command="{x:Bind ViewModel.SelectTabCommand}" CommandParameter="overview"
+                IsChecked="{x:Bind ViewModel.IsOverviewTab, Mode=OneWay}" />
+            <RadioButton
+                GroupName="SourceTabs" Content="跨实例比对" MinWidth="0"
+                Command="{x:Bind ViewModel.SelectTabCommand}" CommandParameter="compare"
+                IsChecked="{x:Bind ViewModel.IsCompareTab, Mode=OneWay}" />
+            <RadioButton
+                GroupName="SourceTabs" Content="原始表" MinWidth="0"
+                Command="{x:Bind ViewModel.SelectTabCommand}" CommandParameter="tables"
+                IsChecked="{x:Bind ViewModel.IsTablesTab, Mode=OneWay}" />
+            <Button
+                Content="刷新" Style="{StaticResource SkWorkspaceButtonStyle}"
+                Command="{x:Bind ViewModel.RefreshCommand}" Click="Refresh_Click"
+                AutomationProperties.HelpText="重新读取当前视图。" />
+            <ProgressRing
+                Width="24" Height="24" IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+                Visibility="{x:Bind BoolToVisibility(ViewModel.IsLoading), Mode=OneWay}" />
+        </controls:WrapPanel>
+
+        <Grid Grid.Row="2">
+            <!-- 概览只保留常用信息；原始元数据按需展开。 -->
+            <ScrollViewer
+                VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                HorizontalScrollMode="Disabled" HorizontalContentAlignment="Stretch"
+                Visibility="{x:Bind ViewModel.OverviewVisibility, Mode=OneWay}">
+                <StackPanel Spacing="12" Margin="0,0,12,12">
+                    <InfoBar
+                        IsOpen="{x:Bind ViewModel.ShowFreshnessWarning, Mode=OneWay}"
+                        Severity="Warning" Title="{x:Bind ViewModel.FreshnessTitle, Mode=OneWay}"
+                        Message="{x:Bind ViewModel.FreshnessWarning, Mode=OneWay}"
+                        IsClosable="False" AutomationProperties.LiveSetting="Polite" />
+
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.SourceCards, Mode=OneWay}" AutomationProperties.Name="数据实例概况">
+                        <ItemsRepeater.Layout>
+                            <UniformGridLayout
+                                Orientation="Horizontal" MaximumRowsOrColumns="2"
+                                MinItemWidth="320" MinColumnSpacing="12" MinRowSpacing="12"
+                                ItemsStretch="Fill" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SourceCardItem">
+                                <Border Padding="16" Style="{StaticResource SkPanelStyle}" AutomationProperties.Name="{x:Bind CardName}">
+                                    <StackPanel Spacing="6">
+                                        <controls:WrapPanel ColumnSpacing="8" RowSpacing="4">
+                                            <TextBlock Text="{x:Bind DisplayName}" Style="{StaticResource SkStrongTextStyle}" />
+                                            <Border Style="{StaticResource SkUnknownChipStyle}" Padding="6,2">
+                                                <TextBlock Text="{x:Bind InstanceBadge}" Style="{StaticResource SkChipTextStyle}" Foreground="{ThemeResource SkUnknownBrush}" />
+                                            </Border>
+                                        </controls:WrapPanel>
+                                        <TextBlock Text="{x:Bind Source}" Style="{StaticResource SkMonoTextStyle}" />
+                                        <TextBlock Text="{x:Bind Upstream}" Style="{StaticResource SkMonoTextStyle}" />
+                                        <TextBlock Text="{x:Bind Site}" Style="{StaticResource SkMonoTextStyle}" />
+                                        <Grid ColumnSpacing="12" Margin="0,4,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="1.3*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="行数" Style="{StaticResource SkMutedTextStyle}" />
+                                                <TextBlock Text="{x:Bind RowsLabel}" Style="{StaticResource SkStrongTextStyle}" />
+                                                <TextBlock Text="{x:Bind CoverageLabel}" Style="{StaticResource SkMutedTextStyle}" />
+                                                <TextBlock Text="{x:Bind OverlayRowsLabel}" Style="{StaticResource SkMutedTextStyle}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <TextBlock Text="最近抓取" Style="{StaticResource SkMutedTextStyle}" />
+                                                <TextBlock Text="{x:Bind CrawlLabel}" Style="{StaticResource SkStrongTextStyle}" />
+                                                <TextBlock Text="{x:Bind FirstCrawlLabel}" Style="{StaticResource SkMutedTextStyle}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+
+                    <Border Style="{StaticResource SkMutedPanelStyle}" Visibility="{x:Bind BoolToVisibility(ViewModel.HasNoSourceCards), Mode=OneWay}">
+                        <TextBlock Text="暂无实例统计，可在「同步」页获取数据后刷新。" Style="{StaticResource SkMutedTextStyle}" />
+                    </Border>
+
+                    <Border Padding="16" Style="{StaticResource SkPanelStyle}">
+                        <StackPanel Spacing="8">
+                            <controls:WrapPanel ColumnSpacing="8" RowSpacing="4">
+                                <TextBlock Text="本地知识库" Style="{StaticResource SkSectionTextStyle}" />
+                                <Border
+                                    Style="{StaticResource SkUnknownChipStyle}" Padding="6,2"
+                                    Visibility="{x:Bind StateLineVisibility(ViewModel.IsLoading, ViewModel.DatabaseOk), Mode=OneWay}">
+                                    <TextBlock Text="只读" Style="{StaticResource SkChipTextStyle}" Foreground="{ThemeResource SkUnknownBrush}" />
+                                </Border>
+                            </controls:WrapPanel>
+                            <Grid ColumnSpacing="12" RowSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="路径" Style="{StaticResource SkMutedTextStyle}" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.DatabasePath, Mode=OneWay}" Style="{StaticResource SkMonoTextStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                <TextBlock Grid.Row="1" Text="大小" Style="{StaticResource SkMutedTextStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.DatabaseSize, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}" />
+                            </Grid>
+                            <TextBlock
+                                Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" Style="{StaticResource SkWarningTextStyle}"
+                                TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite"
+                                Visibility="{x:Bind ProblemLineVisibility(ViewModel.IsLoading, ViewModel.DatabaseOk), Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Expander Header="数据库元信息" IsExpanded="False" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="{x:Bind ViewModel.VersionLine, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}" IsTextSelectionEnabled="True" />
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.MetaEntries, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:MetaEntry">
+                                        <StackPanel Spacing="4" Margin="0,0,0,12">
+                                            <TextBlock Text="{x:Bind Key}" Style="{StaticResource SkMonoTextStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                            <TextBlock Text="{x:Bind Value}" Style="{StaticResource SkBodyTextStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Expander>
+
+                    <Border Padding="16" Style="{StaticResource SkPanelStyle}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="资产域速览" Style="{StaticResource SkSectionTextStyle}" />
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.DomainShortcuts, Mode=OneWay}" AutomationProperties.Name="资产域入口">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <controls:WrapPanel ColumnSpacing="8" RowSpacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:DomainShortcut">
+                                        <Button
+                                            Style="{StaticResource SkWorkspaceButtonStyle}" Content="{x:Bind Label}"
+                                            Command="{x:Bind OpenCommand}" CommandParameter="{x:Bind Key}"
+                                            AutomationProperties.Name="{x:Bind OpenName}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock
+                                Text="{x:Bind ViewModel.ActionHintText, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}"
+                                AutomationProperties.LiveSetting="Polite" Visibility="{x:Bind BoolToVisibility(ViewModel.HasActionHint), Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="16" Style="{StaticResource SkPanelStyle}">
+                        <StackPanel Spacing="8">
+                            <controls:WrapPanel ColumnSpacing="16" RowSpacing="4">
+                                <TextBlock Text="译文覆盖层" Style="{StaticResource SkSectionTextStyle}" />
+                                <HyperlinkButton
+                                    Content="查看官方译名" Padding="0"
+                                    Command="{x:Bind ViewModel.OpenTranslationTabCommand}" />
+                            </controls:WrapPanel>
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.OverlayStatus, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:LabelValue">
+                                        <Grid ColumnSpacing="12" Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="160" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind Label}" Style="{StaticResource SkMutedTextStyle}" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Value}" Style="{StaticResource SkBodyTextStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid RowSpacing="12" Visibility="{x:Bind ViewModel.CompareVisibility, Mode=OneWay}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <ItemsControl ItemsSource="{x:Bind ViewModel.CompareScopes, Mode=OneTime}" AutomationProperties.Name="比对类目（多选）">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:WrapPanel ColumnSpacing="16" RowSpacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CompareScopeOption">
+                            <CheckBox Content="{x:Bind DisplayName}" MinWidth="0" IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <controls:WrapPanel Grid.Row="1" ColumnSpacing="16" RowSpacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button
+                            Content="开始比对" Style="{StaticResource SkWorkspaceAccentButtonStyle}"
+                            Command="{x:Bind ViewModel.RunCompareCommand}" IsEnabled="{x:Bind ViewModel.CanRunCompare, Mode=OneWay}" />
+                        <Button
+                            Content="取消比对" Style="{StaticResource SkWorkspaceButtonStyle}"
+                            Command="{x:Bind ViewModel.CancelCompareCommand}" IsEnabled="{x:Bind ViewModel.CanCancelCompare, Mode=OneWay}" />
+                        <ProgressRing
+                            Width="24" Height="24" IsActive="{x:Bind ViewModel.IsComparing, Mode=OneWay}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.IsComparing), Mode=OneWay}" />
+                    </StackPanel>
+                    <controls:WrapPanel ColumnSpacing="16" RowSpacing="4" AutomationProperties.Name="比对结果筛选">
+                        <RadioButton
+                            GroupName="CompareFilter" Content="只看差异" MinWidth="0"
+                            IsEnabled="{x:Bind ViewModel.HasCompareRows, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.SelectCompareFilterCommand}" CommandParameter="diff"
+                            IsChecked="{x:Bind ViewModel.IsCompareFilterDiff, Mode=OneWay}" />
+                        <RadioButton
+                            GroupName="CompareFilter" Content="只看缺口" MinWidth="0"
+                            IsEnabled="{x:Bind ViewModel.HasCompareRows, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.SelectCompareFilterCommand}" CommandParameter="gap"
+                            IsChecked="{x:Bind ViewModel.IsCompareFilterGap, Mode=OneWay}" />
+                        <RadioButton
+                            GroupName="CompareFilter" Content="看全部" MinWidth="0"
+                            IsEnabled="{x:Bind ViewModel.HasCompareRows, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.SelectCompareFilterCommand}" CommandParameter="all"
+                            IsChecked="{x:Bind ViewModel.IsCompareFilterAll, Mode=OneWay}" />
+                    </controls:WrapPanel>
+                    <Button Content="比对说明" Style="{StaticResource SkWorkspaceButtonStyle}">
+                        <Button.Flyout>
+                            <Flyout>
+                                <TextBlock
+                                    MaxWidth="360" Style="{StaticResource SkBodyTextStyle}"
+                                    Text="按对齐键核对实例，内容差异按文本哈希计数。清单最多列出 500 条仅 Sekai Viewer 存在的记录，其余结果见汇总。" />
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </controls:WrapPanel>
+
+                <TextBlock
+                    Grid.Row="2" Text="{x:Bind ViewModel.CompareSummaryText, Mode=OneWay}"
+                    Style="{StaticResource SkMutedTextStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                    Visibility="{x:Bind BoolToVisibility(ViewModel.HasCompareSummary), Mode=OneWay}"
+                    AutomationProperties.LiveSetting="Polite" />
+
+                <Border Grid.Row="3" Padding="0" Style="{StaticResource SkPanelStyle}">
+                    <ScrollViewer x:Name="CompareScroller"
+                        HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                        VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled" ZoomMode="Disabled"
+                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                        <Grid MinWidth="900" Width="{Binding ViewportWidth, ElementName=CompareScroller}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="36" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border Background="{ThemeResource SkSurfaceMutedBrush}" BorderBrush="{ThemeResource SkHairlineBrush}" BorderThickness="0,0,0,1">
+                                <Grid Padding="12,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2.2*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="44" />
+                                        <ColumnDefinition Width="44" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="1.6*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="对齐键" Style="{StaticResource SkTableHeaderTextStyle}" />
+                                    <TextBlock Grid.Column="1" Text="标题" Style="{StaticResource SkTableHeaderTextStyle}" />
+                                    <TextBlock Grid.Column="2" Text="SV" Style="{StaticResource SkTableHeaderTextStyle}" />
+                                    <TextBlock Grid.Column="3" Text="MS" Style="{StaticResource SkTableHeaderTextStyle}" />
+                                    <TextBlock Grid.Column="4" Text="状态" Style="{StaticResource SkTableHeaderTextStyle}" />
+                                    <TextBlock Grid.Column="5" Text="说明" Style="{StaticResource SkTableHeaderTextStyle}" />
+                                </Grid>
+                            </Border>
+                            <ListView
+                                Grid.Row="1" SelectionMode="None" Padding="0" BorderThickness="0"
+                                ItemsSource="{x:Bind ViewModel.FilteredCompareRows, Mode=OneWay}"
+                                ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
+                                ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollMode="Enabled"
+                                AutomationProperties.Name="跨实例比对结果">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:CompareRow">
+                                        <Grid MinHeight="34" Padding="0,4" ColumnSpacing="8" Background="Transparent" AutomationProperties.Name="{x:Bind RowAccessibleName}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2.2*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="44" />
+                                                <ColumnDefinition Width="44" />
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="1.6*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind AlignmentKey}" Style="{StaticResource SkTableCellSecondaryTextStyle}" ToolTipService.ToolTip="{x:Bind AlignmentKey}" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Title}" Style="{StaticResource SkTableCellTextStyle}" ToolTipService.ToolTip="{x:Bind Title}" />
+                                            <TextBlock Grid.Column="2" Text="{x:Bind LeftBadge}" Style="{StaticResource SkTableCellTextStyle}" />
+                                            <TextBlock Grid.Column="3" Text="{x:Bind RightBadge}" Style="{StaticResource SkTableCellTextStyle}" />
+                                            <TextBlock Grid.Column="4" Text="{x:Bind StatusLabel}" Style="{StaticResource SkTableCellTextStyle}" />
+                                            <TextBlock Grid.Column="5" Text="{x:Bind Detail}" Style="{StaticResource SkTableCellSecondaryTextStyle}" ToolTipService.ToolTip="{x:Bind Detail}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="MinHeight" Value="34" />
+                                        <Setter Property="Padding" Value="12,0" />
+                                        <Setter Property="Margin" Value="0" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                            </ListView>
+                            <TextBlock
+                                Grid.Row="1" Text="{x:Bind ViewModel.CompareEmptyText, Mode=OneWay}" Margin="24"
+                                Style="{StaticResource SkMutedTextStyle}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                                Visibility="{x:Bind BoolToVisibility(ViewModel.CompareNotRun), Mode=OneWay}" />
+                            <StackPanel
+                                Grid.Row="1" Style="{StaticResource SkStatePanelStyle}"
+                                Visibility="{x:Bind BoolToVisibility(ViewModel.IsCompareFilterEmpty), Mode=OneWay}">
+                                <TextBlock Text="{x:Bind ViewModel.CompareFilterEmptyText, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}" TextAlignment="Center" />
+                                <Button
+                                    Content="看全部" Style="{StaticResource SkWorkspaceButtonStyle}"
+                                    Command="{x:Bind ViewModel.SelectCompareFilterCommand}" CommandParameter="all" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <Grid Visibility="{x:Bind ViewModel.TablesVisibility, Mode=OneWay}">
+                <Frame x:Name="TablesFrame" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

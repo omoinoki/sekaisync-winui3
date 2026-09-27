@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SekaiSync.Desktop.Views.SyncPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowSpacing="12" SizeChanged="Workspace_SizeChanged">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="同步" Style="{StaticResource SkWorkspaceHeadingStyle}" />
+            <Border Style="{StaticResource SkHeadingRuleStyle}" />
+        </StackPanel>
+
+        <!-- 操作区吃掉标题以下的全部高度；输出控制台已经上移到 shell 的跨页停靠区。 -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="8">
+                <!-- 任务状态放在第一行：跑起来之后这一行是唯一要盯的反馈，不该在折叠区下面。 -->
+                <Border Style="{StaticResource SkPanelStyle}" Padding="12">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBlock Text="任务状态" Style="{StaticResource SkStrongTextStyle}" VerticalAlignment="Center" />
+                                <ProgressRing Width="24" Height="24" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                                              Visibility="{x:Bind ViewModel.IsBusyVisibility, Mode=OneWay}" AutomationProperties.Name="任务运行中" />
+                                <Border Style="{StaticResource SkUnknownChipStyle}" Visibility="{x:Bind BoolToVisibility(ViewModel.ToneIsNeutral), Mode=OneWay}">
+                                    <TextBlock Text="空闲" Style="{StaticResource SkChipTextStyle}" Foreground="{ThemeResource SkUnknownBrush}" />
+                                </Border>
+                                <Border Style="{StaticResource SkWarningChipStyle}" Visibility="{x:Bind BoolToVisibility(ViewModel.ToneIsWorking), Mode=OneWay}">
+                                    <TextBlock Text="进行中" Style="{StaticResource SkChipTextStyle}" Foreground="{ThemeResource SkWarningBrush}" />
+                                </Border>
+                                <Border Style="{StaticResource SkSuccessChipStyle}" Visibility="{x:Bind BoolToVisibility(ViewModel.ToneIsSuccess), Mode=OneWay}">
+                                    <TextBlock Text="完成" Style="{StaticResource SkChipTextStyle}" Foreground="{ThemeResource SkSuccessBrush}" />
+                                </Border>
+                                <Border Style="{StaticResource SkDangerChipStyle}" Visibility="{x:Bind BoolToVisibility(ViewModel.ToneIsProblem), Mode=OneWay}">
+                                    <TextBlock Text="未成功" Style="{StaticResource SkChipTextStyle}" Foreground="{ThemeResource SkDangerBrush}" />
+                                </Border>
+                                <Border Style="{StaticResource SkUnknownChipStyle}" Visibility="{x:Bind BoolToVisibility(ViewModel.ToneIsCancelled), Mode=OneWay}">
+                                    <TextBlock Text="已取消" Style="{StaticResource SkChipTextStyle}" Foreground="{ThemeResource SkUnknownBrush}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.Bus.StatusText, Mode=OneWay}"
+                                       VerticalAlignment="Center" Style="{StaticResource SkBodyTextStyle}"
+                                       AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="同步任务状态" />
+                        </Grid>
+                        <TextBlock Text="{x:Bind ViewModel.DisabledReasonText, Mode=OneWay}"
+                                   Visibility="{x:Bind ViewModel.IsBusyVisibility, Mode=OneWay}"
+                                   Style="{StaticResource SkBodyTextStyle}" AutomationProperties.LiveSetting="Polite" />
+                        <InfoBar IsOpen="{x:Bind ViewModel.LockHeld, Mode=OneWay}"
+                                 Visibility="{x:Bind BoolToVisibility(ViewModel.LockHeld), Mode=OneWay}"
+                                 Severity="Warning" Title="{x:Bind ViewModel.LockNoticeTitle, Mode=OneWay}"
+                                 Message="{x:Bind ViewModel.LockNoticeMessage, Mode=OneWay}" IsClosable="False" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SkPanelStyle}" Padding="12">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="StoreLabel" Text="目标目录" Style="{StaticResource SkInlineLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{x:Bind ViewModel.StorePathText, Mode=OneWay}"
+                                 Style="{StaticResource SkWorkspaceTextBoxStyle}" IsReadOnly="True"
+                                 IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                                 AutomationProperties.LabeledBy="{x:Bind StoreLabel}"
+                                 ToolTipService.ToolTip="{x:Bind ViewModel.StorePathText, Mode=OneWay}" />
+                    </Grid>
+                </Border>
+
+                <Grid x:Name="CommandGroupsGrid">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="DataSyncGroup" Style="{StaticResource SkPanelStyle}" Padding="8,4" Margin="0,0,6,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="DataSyncTitle" Text="数据同步与公告" Style="{StaticResource SkStrongTextStyle}"
+                                       VerticalAlignment="Center" Margin="4,0,0,2" />
+                            <CommandBar x:Name="DataSyncBar" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                        DefaultLabelPosition="Right" IsOpen="False" IsDynamicOverflowEnabled="True"
+                                        HorizontalAlignment="Stretch" AutomationProperties.Name="数据同步与公告">
+                                <AppBarButton Label="同步五服 Master" IsEnabled="{x:Bind ViewModel.CanSync, Mode=OneWay}"
+                                              Command="{x:Bind ViewModel.SyncAllCommand}"
+                                              AutomationProperties.HelpText="同步 jp,en,cn,tc,kr 的 Master 数据。完整命令见任务详情。"
+                                              ToolTipService.ToolTip="python -m sekaisync sync --regions jp,en,cn,tc,kr">
+                                    <AppBarButton.Icon><FontIcon Glyph="&#xE895;" AutomationProperties.AccessibilityView="Raw" /></AppBarButton.Icon>
+                                </AppBarButton>
+                                <AppBarButton Label="同步官方公告" IsEnabled="{x:Bind ViewModel.CanSync, Mode=OneWay}"
+                                              Command="{x:Bind ViewModel.NewsSyncCommand}"
+                                              AutomationProperties.HelpText="同步五服官方公告索引，写入 kb/news。"
+                                              ToolTipService.ToolTip="python -m sekaisync news sync">
+                                    <AppBarButton.Icon><FontIcon Glyph="&#xE715;" AutomationProperties.AccessibilityView="Raw" /></AppBarButton.Icon>
+                                </AppBarButton>
+                                <AppBarButton Label="缓存已同步公告" IsEnabled="{x:Bind ViewModel.CanSync, Mode=OneWay}"
+                                              Command="{x:Bind ViewModel.NewsCacheCommand}"
+                                              AutomationProperties.HelpText="为本地已同步公告缓存官方正文，不涉及文字材料缓存。"
+                                              ToolTipService.ToolTip="python -m sekaisync news sync --with-bodies">
+                                    <AppBarButton.Icon><FontIcon Glyph="&#xE896;" AutomationProperties.AccessibilityView="Raw" /></AppBarButton.Icon>
+                                </AppBarButton>
+                            </CommandBar>
+                        </Grid>
+                    </Border>
+                    <Border x:Name="InspectionGroup" Grid.Column="1" Grid.Row="0" Style="{StaticResource SkPanelStyle}" Padding="8,4" Margin="6,0,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="InspectionTitle" Text="本地巡检" Style="{StaticResource SkStrongTextStyle}"
+                                       VerticalAlignment="Center" Margin="4,0,0,2" />
+                            <CommandBar x:Name="InspectionBar" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                        DefaultLabelPosition="Right" IsOpen="False" IsDynamicOverflowEnabled="True"
+                                        HorizontalAlignment="Stretch" AutomationProperties.Name="本地巡检">
+                                <AppBarButton Label="状态" IsEnabled="{x:Bind ViewModel.CanRun, Mode=OneWay}"
+                                              Command="{x:Bind ViewModel.ShowStatusCommand}"
+                                              ToolTipService.ToolTip="python -m sekaisync --no-event-check status">
+                                    <AppBarButton.Icon><FontIcon Glyph="&#xE946;" AutomationProperties.AccessibilityView="Raw" /></AppBarButton.Icon>
+                                </AppBarButton>
+                                <AppBarButton Label="完整度" IsEnabled="{x:Bind ViewModel.CanRun, Mode=OneWay}"
+                                              Command="{x:Bind ViewModel.ShowProgressCommand}"
+                                              AutomationProperties.HelpText="重算覆盖率并写入 store/cache/progress.json。"
+                                              ToolTipService.ToolTip="python -m sekaisync --no-event-check progress">
+                                    <AppBarButton.Icon><FontIcon Glyph="&#xE9D2;" AutomationProperties.AccessibilityView="Raw" /></AppBarButton.Icon>
+                                </AppBarButton>
+                                <AppBarButton Label="完整性" IsEnabled="{x:Bind ViewModel.CanRun, Mode=OneWay}"
+                                              Command="{x:Bind ViewModel.CheckIntegrityCommand}"
+                                              ToolTipService.ToolTip="python -m sekaisync --no-event-check integrity">
+                                    <AppBarButton.Icon><FontIcon Glyph="&#xE72E;" AutomationProperties.AccessibilityView="Raw" /></AppBarButton.Icon>
+                                </AppBarButton>
+                                <AppBarSeparator />
+                                <AppBarButton Label="取消" IsEnabled="{x:Bind ViewModel.CanCancel, Mode=OneWay}"
+                                              Click="Cancel_Click" AutomationProperties.HelpText="确认后终止当前任务的子进程。">
+                                    <AppBarButton.Icon><FontIcon Glyph="&#xE711;" AutomationProperties.AccessibilityView="Raw" /></AppBarButton.Icon>
+                                </AppBarButton>
+                            </CommandBar>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Border Style="{StaticResource SkPanelStyle}" Padding="12">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="文字缓存" Style="{StaticResource SkStrongTextStyle}" />
+                            <TextBlock Text="{x:Bind ViewModel.CrawlScopeSummary, Mode=OneWay}"
+                                       Style="{StaticResource SkMutedTextStyle}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="{x:Bind ViewModel.CrawlButtonLabel, Mode=OneTime}"
+                                Style="{StaticResource SkWorkspaceAccentButtonStyle}"
+                                IsEnabled="{x:Bind ViewModel.CanRun, Mode=OneWay}"
+                                Click="ConfigureCache_Click"
+                                AutomationProperties.Name="配置文字缓存"
+                                AutomationProperties.HelpText="打开二级窗口选择区服、缓存深度并确认使用声明。"
+                                ToolTipService.ToolTip="打开文字缓存设置与使用声明" />
+                    </Grid>
+                </Border>
+
+                <Button Content="帮助" HorizontalAlignment="Right" MinWidth="120"
+                        Click="Help_Click"
+                        AutomationProperties.HelpText="打开二级窗口查看本次会做什么、数据存到哪里，以及完整命令行。"
+                        ToolTipService.ToolTip="查看任务说明与完整命令行" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

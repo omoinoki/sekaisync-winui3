@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  ══ 品牌进入平台的一层覆盖 ══
+  手册 §3.1 要「青色表示主操作与当前选择」，§4 的 Windows 行把「选择色」列为品牌可进入的位置，
+  同时要求原生控件保持原生度量。所以这里**只覆盖颜色类别名**，不动尺寸、圆角与模板。
+
+  为什么覆盖别名键而不是只覆盖 AccentFillColorDefaultBrush：
+  generic.xaml 里 86 个键（AccentButtonBackground / ProgressBarForeground /
+  NavigationViewSelectionIndicatorForeground …）都别名到它，但 WinUI 的**选中底色**
+  从来不是 accent，而是 SubtleFillColorSecondary —— 所以选择色必须单独覆盖那几个别名键。
+
+  为什么必须是独立的合并字典、且排在 XamlControlsResources 之后：
+  App.Resources 的查找顺序是「先 MergedDictionaries（后合并的优先），再自身 ThemeDictionaries」。
+  把覆盖写进 App.xaml 自己的 ThemeDictionaries 会被框架字典压住（实测：AccentButtonStyle 仍是系统色，
+  而选择底色的覆盖生效了，因为框架对它没有更早的定义）。放进独立的 Brand.xaml 作为**最后一个**合并项，
+  查找时才轮得到它。
+
+  语义状态（InfoBar 的 success/caution/critical、禁用态、超链接色）一律不动：
+  手册 §3.2 要求状态优先用系统语义资源，品牌不得挤掉事实含义。
+  HighContrast 档不写任何覆盖，整段交回系统。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="#F4F7FA" />
+            <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="#D5E1E8" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#7A8B9B" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#006F78" />
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#004EC2" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#7A8B9B" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#006F78" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#006F78" />
+            <SolidColorBrush x:Key="FocusStrokeColorOuterBrush" Color="#004EC2" />
+            <SolidColorBrush x:Key="FocusStrokeColorInnerBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#004EC2" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ListViewItemFocusVisualPrimaryBrush" Color="#004EC2" />
+            <SolidColorBrush x:Key="ListViewItemFocusVisualSecondaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ListViewItemFocusBorderBrush" Color="#004EC2" />
+
+            <!-- 主操作 / 当前选择：tokens.json action #006F78、on-action #FFFFFF -->
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#006F78" />
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#005963" />
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#005963" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorSelectedText" Color="#FFFFFF" />
+
+            <SolidColorBrush x:Key="AccentButtonBackground" Color="#006F78" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#005963" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#005963" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrush" Color="#006F78" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPointerOver" Color="#005963" />
+            <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+
+            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#006F78" />
+            <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="#006F78" />
+            <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPointerOverBrush" Color="#005963" />
+
+            <!-- 选中底：tokens.json selection / on-selection（实测 7.18:1） -->
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#DDF7F7" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#C6EFEF" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#B0E7E7" />
+            <SolidColorBrush x:Key="ListViewItemForegroundSelected" Color="#005963" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#DDF7F7" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#005963" />
+
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#006F78" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#006F78" />
+            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#006F78" />
+            <SolidColorBrush x:Key="RadioDotBackgroundSelected" Color="#006F78" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="#101824" />
+            <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="#3C4B60" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="#182335" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#71849C" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#68E2DD" />
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FFD166" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#182335" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#71849C" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#68E2DD" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#68E2DD" />
+            <SolidColorBrush x:Key="FocusStrokeColorOuterBrush" Color="#FFD166" />
+            <SolidColorBrush x:Key="FocusStrokeColorInnerBrush" Color="#182335" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#FFD166" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#182335" />
+            <SolidColorBrush x:Key="ListViewItemFocusVisualPrimaryBrush" Color="#FFD166" />
+            <SolidColorBrush x:Key="ListViewItemFocusVisualSecondaryBrush" Color="#182335" />
+            <SolidColorBrush x:Key="ListViewItemFocusBorderBrush" Color="#FFD166" />
+
+            <!-- 深色档 action #68E2DD / on-action #0D252C -->
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#68E2DD" />
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#93EEE9" />
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#4FAFB0" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="#0D252C" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="#0D252C" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorSelectedText" Color="#0D252C" />
+
+            <SolidColorBrush x:Key="AccentButtonBackground" Color="#68E2DD" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#93EEE9" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#4FAFB0" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrush" Color="#68E2DD" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPointerOver" Color="#93EEE9" />
+            <SolidColorBrush x:Key="AccentButtonForeground" Color="#0D252C" />
+
+            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#68E2DD" />
+            <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="#68E2DD" />
+            <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPointerOverBrush" Color="#93EEE9" />
+
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#143C43" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#1B4C54" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#0D2E34" />
+            <SolidColorBrush x:Key="ListViewItemForegroundSelected" Color="#93EEE9" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#143C43" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#93EEE9" />
+
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#68E2DD" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#68E2DD" />
+            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#68E2DD" />
+            <SolidColorBrush x:Key="RadioDotBackgroundSelected" Color="#68E2DD" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

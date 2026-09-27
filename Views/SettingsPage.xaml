@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SekaiSync.Desktop.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="设置" Style="{StaticResource SkWorkspaceHeadingStyle}" />
+            <Border Style="{StaticResource SkHeadingRuleStyle}" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="16" Margin="0,0,12,8">
+                <Border Style="{StaticResource SkPanelStyle}" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="数据源" Style="{StaticResource SkStrongTextStyle}" />
+                        <TextBlock x:Name="StoreLabel" Text="store 目录" Style="{StaticResource SkBodyTextStyle}" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Text="{x:Bind ViewModel.StorePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource SkWorkspaceTextBoxStyle}" PlaceholderText="留空自动探测"
+                                     IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                                     AutomationProperties.LabeledBy="{x:Bind StoreLabel}"
+                                     AutomationProperties.HelpText="{x:Bind ViewModel.StoreOverrideNote, Mode=OneWay}" />
+                            <Button Grid.Column="1" Content="浏览…" Style="{StaticResource SkWorkspaceButtonStyle}"
+                                    Command="{x:Bind ViewModel.BrowseStoreCommand}" AutomationProperties.Name="浏览选择 store 目录"
+                                    AutomationProperties.HelpText="选完立即保存设置并切换数据源。" ToolTipService.ToolTip="选择目录后立即保存设置" />
+                        </Grid>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="浏览后立即保存；手动输入后请点保存设置。" Style="{StaticResource SkBodyTextStyle}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="恢复自动探测…" Style="{StaticResource SkWorkspaceButtonStyle}"
+                                    Click="ResetStorePath_Click" AutomationProperties.Name="重置 store 覆盖路径"
+                                    AutomationProperties.HelpText="确认后清空覆盖路径、立即保存并切换数据源。" />
+                        </Grid>
+                        <Grid ColumnSpacing="12" RowSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="当前目录" Style="{StaticResource SkBodyTextStyle}" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.CurrentEffectiveStore, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}"
+                                       IsTextSelectionEnabled="True" AutomationProperties.Name="当前生效的 store 路径" />
+                            <TextBlock Grid.Row="1" Text="连接状态" Style="{StaticResource SkBodyTextStyle}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.DatabaseStatusText, Mode=OneWay}"
+                                       Style="{StaticResource SkBodyTextStyle}" IsTextSelectionEnabled="True"
+                                       AutomationProperties.Name="当前数据库连接状态" AutomationProperties.LiveSetting="Polite" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SkPanelStyle}" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="后端进程" Style="{StaticResource SkStrongTextStyle}" />
+                        <TextBlock x:Name="PythonLabel" Text="Python 解释器" Style="{StaticResource SkBodyTextStyle}" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Text="{x:Bind ViewModel.PythonExecutable, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource SkWorkspaceTextBoxStyle}" PlaceholderText="python"
+                                     IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                                     AutomationProperties.LabeledBy="{x:Bind PythonLabel}"
+                                     AutomationProperties.HelpText="{x:Bind ViewModel.PythonNote, Mode=OneWay}" />
+                            <Button Grid.Column="1" Content="保存并检测" Style="{StaticResource SkWorkspaceButtonStyle}"
+                                    IsEnabled="{x:Bind ViewModel.CanCheckPython, Mode=OneWay}" Command="{x:Bind ViewModel.CheckPythonCommand}"
+                                    AutomationProperties.Name="保存设置并检测 Python 解释器"
+                                    AutomationProperties.HelpText="{x:Bind ViewModel.PythonCheckHelpText, Mode=OneWay}"
+                                    ToolTipService.ToolTip="先保存设置，再运行本机 kb-status 检测；输出见同步页。" />
+                        </Grid>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ProgressRing Width="24" Height="24" IsActive="{x:Bind ViewModel.IsCheckingPython, Mode=OneWay}"
+                                          Visibility="{x:Bind BoolToVisibility(ViewModel.IsCheckingPython), Mode=OneWay}"
+                                          AutomationProperties.Name="正在检测解释器" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.PythonCheckText, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}"
+                                       AutomationProperties.Name="解释器检测结论" AutomationProperties.LiveSetting="Polite" />
+                        </Grid>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="160" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="PortLabel" Text="HTTP 服务端口" Style="{StaticResource SkBodyTextStyle}" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{x:Bind ViewModel.HttpPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource SkWorkspaceTextBoxStyle}" InputScope="Number"
+                                     IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                                     AutomationProperties.LabeledBy="{x:Bind PortLabel}"
+                                     AutomationProperties.HelpText="{x:Bind ViewModel.PortNote, Mode=OneWay}" />
+                            <TextBlock Grid.Column="2" Text="1–65535" Style="{StaticResource SkBodyTextStyle}" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SkPanelStyle}" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="界面" Style="{StaticResource SkStrongTextStyle}" />
+                        <Grid ColumnSpacing="16" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock x:Name="ThemeLabel" Text="主题" Style="{StaticResource SkBodyTextStyle}" />
+                            <TextBlock x:Name="PageSizeLabel" Grid.Column="1" Text="每页行数" Style="{StaticResource SkBodyTextStyle}" />
+                            <TextBlock x:Name="MotionDensityLabel" Grid.Column="2" Text="装饰性动效" Style="{StaticResource SkBodyTextStyle}" />
+                            <ComboBox Grid.Row="1" Style="{StaticResource SkWorkspaceComboBoxStyle}" HorizontalAlignment="Stretch"
+                                      ItemsSource="{x:Bind ViewModel.ThemeOptions, Mode=OneTime}" SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}"
+                                      AutomationProperties.LabeledBy="{x:Bind ThemeLabel}" AutomationProperties.HelpText="{x:Bind ViewModel.ThemeNote, Mode=OneTime}" />
+                            <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource SkWorkspaceComboBoxStyle}" HorizontalAlignment="Stretch"
+                                      ItemsSource="{x:Bind ViewModel.PageSizeOptions, Mode=OneTime}" SelectedItem="{x:Bind ViewModel.PageSize, Mode=TwoWay}"
+                                      AutomationProperties.LabeledBy="{x:Bind PageSizeLabel}" AutomationProperties.HelpText="{x:Bind ViewModel.PageSizeNote, Mode=OneTime}" />
+                            <ComboBox Grid.Row="1" Grid.Column="2" Style="{StaticResource SkWorkspaceComboBoxStyle}" HorizontalAlignment="Stretch"
+                                      ItemsSource="{x:Bind ViewModel.MotionDensityOptions, Mode=OneTime}" SelectedIndex="{x:Bind ViewModel.MotionDensityIndex, Mode=TwoWay}"
+                                      AutomationProperties.LabeledBy="{x:Bind MotionDensityLabel}" AutomationProperties.HelpText="{x:Bind ViewModel.MotionDensityNote, Mode=OneWay}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 「关于」只留身份与三处路径；行为规则与命令原文移到右下角的「帮助」二级窗口。 -->
+                <Expander Header="关于" IsExpanded="False" Style="{StaticResource SkDetailExpanderStyle}">
+                    <StackPanel Spacing="8" Margin="16,16,16,12">
+                        <TextBlock Text="{x:Bind ViewModel.AboutText, Mode=OneWay}" Style="{StaticResource SkStrongTextStyle}" />
+                        <TextBlock Style="{StaticResource SkBodyTextStyle}">
+                            <Hyperlink NavigateUri="https://github.com/omoinoki" Click="Credit_Click">zukunftsHolz @ Project OMNK</Hyperlink>
+                        </TextBlock>
+                        <TextBlock Text="{x:Bind ViewModel.RepoRootNote, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}" IsTextSelectionEnabled="True" />
+                        <TextBlock Text="{x:Bind ViewModel.ServiceBaseNote, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}" IsTextSelectionEnabled="True" />
+                        <TextBlock Text="{x:Bind ViewModel.SettingsFileNote, Mode=OneWay}" Style="{StaticResource SkBodyTextStyle}" IsTextSelectionEnabled="True" />
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 保存与回执固定在滚动区外。 -->
+        <StackPanel Grid.Row="2" Spacing="8">
+            <InfoBar IsOpen="{x:Bind ViewModel.HasSavedNotice, Mode=OneWay}"
+                     Severity="{x:Bind ViewModel.SavedNoticeSeverity, Mode=OneWay}"
+                     Message="{x:Bind ViewModel.SavedNoticeText, Mode=OneWay}" IsClosable="True"
+                     AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="设置操作回执" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="保存后应用更改" Style="{StaticResource SkBodyTextStyle}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Content="帮助" Click="Help_Click"
+                            AutomationProperties.HelpText="打开二级窗口查看各项设置的生效时机与技术细节。"
+                            ToolTipService.ToolTip="查看设置项说明与技术细节" />
+                    <Button Content="保存设置" Style="{StaticResource SkWorkspaceAccentButtonStyle}"
+                            Command="{x:Bind ViewModel.SaveCommand}" AutomationProperties.Name="保存设置"
+                            AutomationProperties.HelpText="保存到本机 settings.json，并按新数据源重载各页。" />
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</Page>

@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SekaiSync.Desktop.Views.NewsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:SekaiSync.Desktop.Controls"
+    xmlns:models="using:SekaiSync.Desktop.Models"
+    mc:Ignorable="d">
+
+    <Grid x:Name="LayoutRoot" KeyDown="OnPageKeyDown" SizeChanged="OnLayoutSizeChanged">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- F5 / Ctrl+F 由根 Grid 的 KeyDown 处理：挂 KeyboardAccelerator 时 WinUI 会在
+             悬停时自动弹按键提示气泡（webview 区域上方会莫名出现一个「F5」）。 -->
+
+        <!-- 提示条独立成行 + Visibility 绑定：IsOpen=false 仍占 ~12 DIP 空壳，
+             只有 Collapsed 才连 Margin 完全不占位。行距一律用各行自带 Margin 顶距，
+             不用 Grid.RowSpacing（它对折叠行依然占位）。
+             「未选择本地库」这类全局状态由壳层常驻提示条负责，这里只报数据源本身的状态。 -->
+        <StackPanel Grid.Row="0">
+            <!-- N-1：generation 校验/指针异常必须是 Warning，不能显示「已就绪」。 -->
+            <InfoBar
+                Margin="0,0,0,12"
+                Visibility="{x:Bind BoolToVisibility(ViewModel.ShowGenerationWarning), Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.ShowGenerationWarning, Mode=OneWay}"
+                Severity="Warning"
+                Title="{x:Bind ViewModel.GenerationWarningTitle, Mode=OneWay}"
+                Message="{x:Bind ViewModel.GenerationWarningText, Mode=OneWay}"
+                IsClosable="False" />
+
+            <!-- 没有 generation 指针时读到的是旧版单文件布局：它按定义不再更新，必须说明。 -->
+            <InfoBar Margin="0,0,0,12"
+                Visibility="{x:Bind BoolToVisibility(ViewModel.ShowLegacyNotice), Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.ShowLegacyNotice, Mode=OneWay}"
+                Severity="Informational"
+                Title="当前读取的是旧版单文件公告"
+                Message="{x:Bind ViewModel.LegacyNoticeText, Mode=OneWay}"
+                IsClosable="False" />
+
+            <!-- 当前语言未覆盖：标题按状态给（未建库 ≠ 该语言没数据，N-6）。 -->
+            <InfoBar Margin="0,0,0,12"
+                Visibility="{x:Bind BoolToVisibility(ViewModel.ShowEmptyLanguageHint), Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.ShowEmptyLanguageHint, Mode=OneWay}"
+                Severity="Warning"
+                Title="{x:Bind ViewModel.EmptyLanguageTitle, Mode=OneWay}"
+                Message="{x:Bind ViewModel.EmptyLanguageHint, Mode=OneWay}"
+                IsClosable="False" />
+        </StackPanel>
+
+        <!-- 工具条与标题放在 Grid 里：Grid 会把真实宽度传给子元素，
+             WrapPanel 才有换行依据（StackPanel 传的是无限宽，无法换行）。 -->
+        <Grid Grid.Row="1" RowSpacing="12" Margin="0,0,0,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题行：品牌的主要落点（左侧色条 + 横贯渐变细线）。不放副标题——
+                 页面叫什么已经写在这里，再补一句解释只是噪声。 -->
+            <Grid Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="资讯" Style="{StaticResource SkPageHeadingStyle}" />
+                <Button x:Name="PreviewToggle" Grid.Column="1" Content="查看详情"
+                        Style="{StaticResource SkToolbarButtonStyle}" Visibility="Collapsed"
+                        IsEnabled="{x:Bind ViewModel.HasSelection, Mode=OneWay}" Click="OnPreviewToggleClick" />
+                <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource SkHeadingRuleStyle}" />
+            </Grid>
+
+            <!-- 工具条：WrapPanel 承载换行的筛选控件；计数器/刷新/时段不进 WrapPanel，
+                 固定在右侧 —— 条目数是列表的结果反馈，放筛选控件里会被挤到第二行。 -->
+            <Grid x:Name="ToolbarGrid" Grid.Row="1" ColumnSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition x:Name="ToolbarActionsRow" Height="0" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <controls:WrapPanel
+                    Grid.Column="0"
+                    RowSpacing="8"
+                    ColumnSpacing="8"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Stretch">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock x:Name="LangLabel" Text="语言" Style="{StaticResource SkInlineLabelStyle}" />
+                        <ComboBox
+                            MinWidth="150"
+                            Style="{StaticResource SkToolbarComboBoxStyle}"
+                            ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedLanguage, Mode=TwoWay}"
+                            AutomationProperties.LabeledBy="{x:Bind LangLabel}"
+                            AutomationProperties.HelpText="语言与实例绑定：日服公告来自 Sekai Viewer，简中公告来自 Moesekai；切换会重读该语言的文件"
+                            ToolTipService.ToolTip="公告语言档位" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock x:Name="CatLabel" Text="分类" Style="{StaticResource SkInlineLabelStyle}" />
+                        <ComboBox
+                            MinWidth="130"
+                            Style="{StaticResource SkToolbarComboBoxStyle}"
+                            ItemsSource="{x:Bind ViewModel.Categories, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedCategory, Mode=TwoWay}"
+                            AutomationProperties.LabeledBy="{x:Bind CatLabel}"
+                            AutomationProperties.HelpText="分类来自公告的 information_tag 字段，随当前语言重建"
+                            ToolTipService.ToolTip="按资讯分类筛选" />
+                    </StackPanel>
+
+                    <Border Style="{StaticResource SkToolbarDividerStyle}" />
+
+                    <TextBox
+                        x:Name="SearchBox"
+                        MinWidth="200"
+                        Style="{StaticResource SkToolbarTextBoxStyle}"
+                        PlaceholderText="搜索标题 / 正文"
+                        AutomationProperties.Name="搜索公告标题或正文"
+                        AutomationProperties.HelpText="{x:Bind ViewModel.SearchScopeText, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.SearchScopeText, Mode=OneWay}"
+                        Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                        KeyDown="SearchBox_KeyDown" />
+                    <Button
+                        Content="搜索"
+                        Style="{StaticResource SkToolbarAccentButtonStyle}"
+                        Command="{x:Bind ViewModel.SearchCommand}"
+                        AutomationProperties.Name="执行搜索" />
+                    <Button
+                        Content="清除筛选"
+                        Style="{StaticResource SkToolbarButtonStyle}"
+                        Command="{x:Bind ViewModel.ClearFilterCommand}"
+                        IsEnabled="{x:Bind ViewModel.HasActiveFilter, Mode=OneWay}"
+                        AutomationProperties.Name="清除分类、时段与搜索条件"
+                        AutomationProperties.HelpText="三个筛选条件都没有生效时不可用；不会改动搜索框以外的用户状态" />
+                </controls:WrapPanel>
+
+                <!-- 右侧固定组：时段开关 · 条目数 · 刷新 · 加载圈，永远在同一行右端。
+                     开关在计数器前面（第四批批示：挪到「共 xx 条」前面）。 -->
+                <StackPanel
+                    x:Name="ToolbarActions"
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top">
+                    <ToggleSwitch
+                        OnContent="仅进行中"
+                        OffContent="全部时段"
+                        IsOn="{x:Bind ViewModel.OnlyActive, Mode=TwoWay}"
+                        VerticalAlignment="Center"
+                        Padding="0"
+                        MinWidth="0"
+                        Margin="0,-4.5,0,-4.5"
+                        AutomationProperties.Name="时段筛选"
+                        AutomationProperties.HelpText="按公告的 start_at 与 end_at 判断；end_at 为空视为长期有效" />
+                    <TextBlock
+                        Text="{x:Bind ViewModel.ListCountText, Mode=OneWay}"
+                        Style="{StaticResource SkMutedTextStyle}"
+                        VerticalAlignment="Center"
+                        AutomationProperties.LiveSetting="Polite" />
+                    <Button
+                        Content="刷新"
+                        Style="{StaticResource SkToolbarButtonStyle}"
+                        Command="{x:Bind ViewModel.RefreshCommand}" />
+                    <ProgressRing
+                        Width="24" Height="24"
+                        VerticalAlignment="Center"
+                        IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+                        Visibility="{x:Bind BoolToVisibility(ViewModel.IsLoading), Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <Grid x:Name="DetailColumns" Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="ListColumn" Width="2*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="PreviewColumn" Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 公告列表：表头 + 行共用同一套列宽与 ColumnSpacing；
+                 四态覆盖层叠在列表上，空库/未覆盖/筛空/失败不再共用同一片空白（N-5、N-13）。 -->
+            <Border
+                x:Name="ListPanel"
+                Grid.Column="0"
+                Style="{StaticResource SkPanelStyle}"
+                Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid
+                        Grid.Row="0"
+                        MinHeight="36"
+                        Padding="12,0"
+                        ColumnSpacing="8"
+                        Background="{ThemeResource SkSurfaceMutedBrush}"
+                        BorderBrush="{ThemeResource SkHairlineBrush}"
+                        BorderThickness="0,0,0,1"
+                        AutomationProperties.Name="公告列表表头">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.2*" />
+                            <ColumnDefinition Width="4*" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="0.5*" />
+                            <ColumnDefinition Width="1.8*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="发布" Style="{StaticResource SkTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="1" Text="标题" Style="{StaticResource SkTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="2" Text="分类" Style="{StaticResource SkTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="3" Text="源" Style="{StaticResource SkTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="4" Text="时段" Style="{StaticResource SkTableHeaderTextStyle}" />
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <ListView
+                            x:Name="NewsList"
+                            AutomationProperties.Name="公告列表"
+                            SelectionMode="Single"
+                            ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:NewsItem">
+                                    <!-- 行高用 MinHeight：固定 Height 在 200% 文字缩放时把内容裁掉（N-12）。 -->
+                                    <Grid
+                                        MinHeight="34"
+                                        Padding="0,4"
+                                        ColumnSpacing="8"
+                                        Background="Transparent"
+                                        AutomationProperties.Name="{x:Bind Title}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="4*" />
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="0.5*" />
+                                            <ColumnDefinition Width="1.8*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind PublishedLabel}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Text="{x:Bind Title}"
+                                            Style="{StaticResource SkTableCellTextStyle}"
+                                            TextWrapping="NoWrap"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{x:Bind Title}" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind CategoryLabel}" Style="{StaticResource SkTableCellSecondaryTextStyle}" />
+                                        <TextBlock
+                                            Grid.Column="3"
+                                            Text="{x:Bind InstanceBadge}"
+                                            Style="{StaticResource SkTableCellSecondaryTextStyle}"
+                                            ToolTipService.ToolTip="来源实例：SV = Sekai Viewer，MS = Moesekai"
+                                            AutomationProperties.Name="{x:Bind InstanceBadge}"
+                                            AutomationProperties.HelpText="来源实例徽章：SV 是 Sekai Viewer，MS 是 Moesekai" />
+                                        <TextBlock
+                                            Grid.Column="4"
+                                            Text="{x:Bind PeriodLabel}"
+                                            Style="{StaticResource SkTableCellSecondaryTextStyle}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{x:Bind PeriodLabel}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="MinHeight" Value="34" />
+                                    <Setter Property="Padding" Value="12,0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+
+                        <!-- 四态覆盖层：实底色遮住下面的空白列表，每态各有各的事实 + 下一步。 -->
+                        <Border
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowListStateOverlay), Mode=OneWay}">
+                            <Grid>
+                                <StackPanel Style="{StaticResource SkStatePanelStyle}"
+                                            Visibility="{x:Bind BoolToVisibility(ViewModel.IsListLoading), Mode=OneWay}">
+                                    <ProgressRing Width="24" Height="24" HorizontalAlignment="Center" IsActive="True" />
+                                    <TextBlock Text="正在读取公告…" Style="{StaticResource SkMutedTextStyle}" TextAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource SkStatePanelStyle}"
+                                            Visibility="{x:Bind BoolToVisibility(ViewModel.IsListNoStore), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind ViewModel.NoStoreText, Mode=OneWay}" Style="{StaticResource SkStrongTextStyle}" />
+                                    <TextBlock Text="公告数据与本地库同在 store 目录下。顶部常驻提示条上有「选择本地库」入口，选完再刷新本页。" Style="{StaticResource SkMutedTextStyle}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource SkStatePanelStyle}"
+                                            Visibility="{x:Bind BoolToVisibility(ViewModel.IsListNoFile), Mode=OneWay}">
+                                    <TextBlock Text="这个语言本地没有可读的公告。" Style="{StaticResource SkStrongTextStyle}" />
+                                    <TextBlock Text="{x:Bind ViewModel.NoFileText, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}" />
+                                    <Button Content="刷新" Command="{x:Bind ViewModel.RefreshCommand}" HorizontalAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource SkStatePanelStyle}"
+                                            Visibility="{x:Bind BoolToVisibility(ViewModel.IsListNoResults), Mode=OneWay}">
+                                    <TextBlock Text="未找到相关公告" Style="{StaticResource SkStrongTextStyle}" />
+                                    <TextBlock Text="试试其他关键词，或清除筛选。" Style="{StaticResource SkMutedTextStyle}" />
+                                    <Button Content="清除筛选" Command="{x:Bind ViewModel.ClearFilterCommand}" HorizontalAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource SkStatePanelStyle}"
+                                            Visibility="{x:Bind BoolToVisibility(ViewModel.IsListFailed), Mode=OneWay}">
+                                    <TextBlock Text="读取公告失败。" Style="{StaticResource SkDangerTextStyle}" />
+                                    <TextBlock Text="{x:Bind ViewModel.FailedText, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}" />
+                                    <TextBlock Text="下面不是「没有公告」，是这次没读到。可先刷新重试；反复失败就在诊断日志里查同一句原因。" Style="{StaticResource SkMutedTextStyle}" />
+                                    <Button Content="重试" Command="{x:Bind ViewModel.RefreshCommand}" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Button
+                x:Name="Splitter"
+                Grid.Column="1"
+                Width="14" MinWidth="0" Padding="0"
+                Margin="2,0"
+                VerticalAlignment="Stretch"
+                Background="Transparent" BorderThickness="0"
+                AutomationProperties.Name="调整列表与详情宽度"
+                AutomationProperties.HelpText="拖动调整，或使用左右方向键；Home 和 End 调至两端。"
+                KeyDown="OnSplitterKeyDown">
+                <Rectangle
+                    Width="3"
+                    Height="48"
+                    RadiusX="1.5"
+                    RadiusY="1.5"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Fill="{ThemeResource SkHairlineBrush}"
+                    AutomationProperties.AccessibilityView="Raw" />
+            </Button>
+
+            <!-- 详情：上半固定为「标题 + 一行元信息 + 一行动作」，其余全部收进可展开区，
+                 正文占据剩下的全部高度。此前把缓存状态、稳定 ID、链接、复制、来源开关、
+                 状态、缩放各占一行，正文被挤到只剩几行——信息齐全不等于可读。 -->
+            <Border
+                x:Name="PreviewPanel"
+                Grid.Column="2"
+                Style="{StaticResource SkPanelStyle}"
+                Padding="16,12">
+                <Grid RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 标题行：标题与「来源与标识」展开开关同一行，右端是分类 chip 与时段
+                         （批示：元信息搬上标题首行同行右侧）。展开区浮在下方，不挤压正文。 -->
+                    <Expander
+                        Grid.Row="0"
+                        Style="{StaticResource SkDetailExpanderStyle}"
+                        IsExpanded="False"
+                        Visibility="{x:Bind BoolToVisibility(ViewModel.HasSelection), Mode=OneWay}"
+                        AutomationProperties.Name="来源与标识">
+                        <!-- 折叠头部自带内边距（样式 Padding=0 曾让内容顶死卡片边框，实测仅 ~5 逻辑 px）。
+                             12 逻辑左右与展开区对齐；chip/时段的顶部偏移按像素实测校准：
+                             标题 16px 首行墨迹中心约在顶部下方 10 逻辑 px，chip 中心需上移 2、时段需上移 6。 -->
+                        <Expander.Header>
+                            <Grid
+                                ColumnSpacing="12"
+                                Margin="12,10,12,10"
+                                HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <!-- 分类 chip 在标题前面（第四批批示：移动到标题前面）。
+                                     标题可换两行，chip 与时段锚定首行。chip 底框高 22 逻辑（Caption 行高 16
+                                     + 上下 padding 6）本就与标题 16px 行高同轴，偏移只需 ~1.5 逻辑像素微调
+                                     （此前 5 给多了 4 像素，实测墨迹中心偏低 5 物理像素）。 -->
+                                <Border
+                                    Grid.Column="0"
+                                    VerticalAlignment="Top"
+                                    Margin="0,1.5,0,0"
+                                    Style="{StaticResource SkAccentChipStyle}"
+                                    Visibility="{x:Bind BoolToVisibility(ViewModel.HasSelection), Mode=OneWay}">
+                                    <TextBlock Style="{StaticResource SkChipTextStyle}" Text="{x:Bind ViewModel.DetailCategory, Mode=OneWay}" />
+                                </Border>
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Text="{x:Bind ViewModel.DetailTitle, Mode=OneWay}"
+                                    ToolTipService.ToolTip="{x:Bind ViewModel.DetailTitle, Mode=OneWay}"
+                                    Style="{StaticResource SkStrongTextStyle}"
+                                    FontSize="16"
+                                    TextWrapping="Wrap"
+                                    MaxLines="2"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Text="{x:Bind ViewModel.DetailPeriod, Mode=OneWay}"
+                                    Style="{StaticResource SkMutedTextStyle}"
+                                    VerticalAlignment="Top"
+                                    Margin="0,4,0,0"
+                                    TextTrimming="CharacterEllipsis"
+                                    MaxLines="1" />
+                            </Grid>
+                        </Expander.Header>
+                        <!-- 展开区内容与折叠头部同用 12 逻辑内边距，左右与标题/chip 对齐，
+                             复制按钮离卡片右缘不再贴死（此前实测仅 2 物理像素）。 -->
+                        <StackPanel Spacing="6" Padding="12,10,12,6">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="6">
+                                    <TextBlock Text="{x:Bind ViewModel.DetailId, Mode=OneWay}" Style="{StaticResource SkMonoTextStyle}" />
+                                    <TextBlock Text="{x:Bind ViewModel.DetailUrl, Mode=OneWay}" Style="{StaticResource SkMonoTextStyle}" />
+                                    <TextBlock
+                                        Text="{x:Bind ViewModel.CopyResultText, Mode=OneWay}"
+                                        Style="{StaticResource SkMutedTextStyle}"
+                                        Visibility="{x:Bind BoolToVisibility(ViewModel.ShowCopyResult), Mode=OneWay}"
+                                        AutomationProperties.LiveSetting="Polite" />
+                                </StackPanel>
+                                <!-- 复制收进折叠层并右对齐（第四批批示）。 -->
+                                <Button
+                                    Grid.Column="1"
+                                    Content="复制"
+                                    VerticalAlignment="Top"
+                                    Style="{StaticResource SkToolbarButtonStyle}"
+                                    AccessKey="C"
+                                    Command="{x:Bind ViewModel.CopyDetailCommand}"
+                                    IsEnabled="{x:Bind ViewModel.HasSelection, Mode=OneWay}"
+                                    AutomationProperties.Name="复制标题、稳定 ID 与原文链接"
+                                    AutomationProperties.HelpText="复制标题、稳定 ID 与原文链接三样；未选中公告时不可用" />
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- 动作一行：来源开关留左，缩放与复制靠右（批示：本行右侧对齐）。
+                         「打开原网页」并进来源切换——切到原网页本身就是看原站。
+                         缩放一套控件两用：网页模式调 WebView 缩放，文本模式调正文字号；
+                         ↺ 两种模式都出现、位置一致，语义各归各模式（网页退站点 100%、
+                         缓存退字号 100%）——第六批批示：不再只在网页模式出现。
+                         未缓存的条目：开关置灰锁死在原网页模式（批示：删除文字标记，用状态本身表达）。 -->
+                    <Grid Grid.Row="1" ColumnSpacing="8"
+                          Visibility="{x:Bind BoolToVisibility(ViewModel.HasSelection), Mode=OneWay}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ToggleSwitch
+                            Grid.Column="0"
+                            OnContent="原网页"
+                            OffContent="缓存原文"
+                            IsOn="{x:Bind ViewModel.ShowWeb, Mode=TwoWay}"
+                            IsEnabled="{x:Bind ViewModel.CanToggleSource, Mode=OneWay}"
+                            HorizontalAlignment="Left"
+                            MinHeight="32"
+                            VerticalAlignment="Center"
+                            Padding="0"
+                            MinWidth="0"
+                            AutomationProperties.Name="正文来源"
+                            AutomationProperties.HelpText="在本地缓存的原文与原始网页之间切换；切到原网页即在内嵌浏览器查看原站。原文未缓存时锁死在原网页模式" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <Button
+                                Click="OnZoomOutClick"
+                                Content="A－"
+                                Style="{StaticResource SkToolbarButtonStyle}"
+                                MinWidth="40"
+                                AutomationProperties.Name="减小缩放"
+                                AutomationProperties.HelpText="网页模式调整网页缩放，文本模式调整正文字号" />
+                            <TextBlock
+                                x:Name="ZoomLabel"
+                                Style="{StaticResource SkMutedTextStyle}"
+                                VerticalAlignment="Center"
+                                MinWidth="44"
+                                TextAlignment="Center"
+                                AutomationProperties.LiveSetting="Polite" />
+                            <Button
+                                Click="OnZoomInClick"
+                                Content="A＋"
+                                Style="{StaticResource SkToolbarButtonStyle}"
+                                MinWidth="40"
+                                AutomationProperties.Name="增大缩放"
+                                AutomationProperties.HelpText="网页模式调整网页缩放，文本模式调整正文字号" />
+                            <Button
+                                Click="OnZoomResetClick"
+                                Content="↺"
+                                Style="{StaticResource SkToolbarButtonStyle}"
+                                MinWidth="40"
+                                ToolTipService.ToolTip="重置为 100%"
+                                AutomationProperties.Name="重置缩放为 100%"
+                                AutomationProperties.HelpText="网页模式把当前站点的网页缩放退回 100%；缓存模式把正文字号退回 100%" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 原文已抓取 → 渲染文本；否则 WebView2 内嵌打开原链接。 -->
+                    <Grid Grid.Row="2">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{x:Bind BoolToVisibility(ViewModel.ShowDetailText), Mode=OneWay}">
+                            <TextBlock
+                                x:Name="DetailBodyText"
+                                Text="{x:Bind ViewModel.DetailText, Mode=OneWay}"
+                                Style="{StaticResource SkProseTextStyle}"
+                                MaxWidth="704"
+                                HorizontalAlignment="Center"
+                                IsTextSelectionEnabled="True" />
+                        </ScrollViewer>
+                        <WebView2
+                            x:Name="DetailWeb"
+                            Source="{x:Bind ViewModel.WebViewSource, Mode=OneWay}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowWebView), Mode=OneWay}"
+                            NavigationStarting="OnDetailWebNavigationStarting"
+                            CoreWebView2Initialized="OnDetailWebInitializationCompleted" />
+                        <StackPanel Style="{StaticResource SkStatePanelStyle}"
+                                    Visibility="{x:Bind BoolToVisibility(ViewModel.ShowDetailEmpty), Mode=OneWay}">
+                            <TextBlock Text="选择一条公告开始阅读" Style="{StaticResource SkStrongTextStyle}" />
+                            <TextBlock Text="从列表选择公告，即可查看正文与来源。" Style="{StaticResource SkMutedTextStyle}" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

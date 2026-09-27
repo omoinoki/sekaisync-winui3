@@ -1,0 +1,677 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SekaiSync.Desktop.Views.TermsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:SekaiSync.Desktop.Models"
+    xmlns:views="using:SekaiSync.Desktop.Views"
+    xmlns:controls="using:SekaiSync.Desktop.Controls"
+    mc:Ignorable="d">
+
+    <!-- 用语工作区：查询与结果优先，数据说明和辅助信息按需展开。 -->
+    <Page.Resources>
+        <views:TermsBoolToVisibilityConverter x:Key="BoolTrueToVis" />
+        <views:TermsHasTextToVisibilityConverter x:Key="HasTextToVis" />
+        <views:TermsEmptyCellConverter x:Key="EmptyCellToMissing" />
+    </Page.Resources>
+
+    <Grid RowSpacing="8"
+            KeyboardAcceleratorPlacementMode="Hidden">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="F5" Invoked="RefreshAccelerator_Invoked" />
+            <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="FindAccelerator_Invoked" />
+        </Grid.KeyboardAccelerators>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 说明入口按实体页的做法挂在标题行右上角：它是整页数据的解释，不属于某一行的筛选控件。 -->
+        <StackPanel Grid.Row="0" Spacing="0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="用语" Style="{StaticResource SkWorkspaceHeadingStyle}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="数据说明" Style="{StaticResource SkWorkspaceButtonStyle}"
+                        VerticalAlignment="Center" Click="Help_Click"
+                        AutomationProperties.Name="查看用语数据说明"
+                        AutomationProperties.HelpText="打开二级窗口查看实例与版本筛选、搜索范围和可信标记的语义。"
+                        ToolTipService.ToolTip="查看用语数据说明" />
+            </Grid>
+            <Border Style="{StaticResource SkHeadingRuleStyle}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <RadioButton GroupName="TermTabs" Content="术语"
+                    Command="{x:Bind ViewModel.SelectTabCommand}" CommandParameter="glossary"
+                    IsChecked="{x:Bind ViewModel.IsGlossaryTab, Mode=OneWay}" />
+                <RadioButton GroupName="TermTabs" Content="提取用语"
+                    Command="{x:Bind ViewModel.SelectTabCommand}" CommandParameter="terms"
+                    IsChecked="{x:Bind ViewModel.IsTermsTab, Mode=OneWay}" />
+                <RadioButton GroupName="TermTabs" Content="官方译名"
+                    Command="{x:Bind ViewModel.SelectTabCommand}" CommandParameter="translation"
+                    IsChecked="{x:Bind ViewModel.IsTranslationTab, Mode=OneWay}" />
+            </StackPanel>
+
+            <!-- 每个标签与控件、搜索框与按钮作为一个换行单元。 -->
+            <controls:WrapPanel RowSpacing="8" ColumnSpacing="12" HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" Spacing="4" Visibility="{x:Bind ViewModel.TranslationVisibility, Mode=OneWay}">
+                    <TextBlock x:Name="InstanceLabel" Text="实例" Style="{StaticResource SkInlineLabelStyle}" />
+                    <ComboBox MinWidth="152" Style="{StaticResource SkWorkspaceComboBoxStyle}"
+                        ItemsSource="{x:Bind ViewModel.InstanceOptions, Mode=OneTime}"
+                        SelectedItem="{x:Bind ViewModel.SelectedInstance, Mode=TwoWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.InstanceFilterNote, Mode=OneWay}"
+                        AutomationProperties.LabeledBy="{x:Bind InstanceLabel}"
+                        AutomationProperties.HelpText="{x:Bind ViewModel.InstanceFilterNote, Mode=OneWay}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock x:Name="VersionLabel" Text="版本" Style="{StaticResource SkInlineLabelStyle}" />
+                    <ComboBox MinWidth="152" Style="{StaticResource SkWorkspaceComboBoxStyle}"
+                        ItemsSource="{x:Bind ViewModel.VersionOptions, Mode=OneTime}"
+                        SelectedItem="{x:Bind ViewModel.SelectedVersion, Mode=TwoWay}"
+                        ToolTipService.ToolTip="筛选含所选语言名称的条目"
+                        AutomationProperties.LabeledBy="{x:Bind VersionLabel}" />
+                </StackPanel>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="SearchBox" Width="240" Style="{StaticResource SkWorkspaceTextBoxStyle}"
+                        PlaceholderText="搜索词条、译名或标识"
+                        Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        KeyDown="SearchBox_KeyDown"
+                        AutomationProperties.Name="用语搜索框"
+                        AutomationProperties.HelpText="{x:Bind ViewModel.SearchScopeHint, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.SearchScopeHint, Mode=OneWay}" />
+                    <Button Grid.Column="1" Content="搜索" Style="{StaticResource SkWorkspaceAccentButtonStyle}"
+                        Command="{x:Bind ViewModel.SearchCommand}" />
+                </Grid>
+                <Button Content="刷新" Style="{StaticResource SkWorkspaceButtonStyle}"
+                    Command="{x:Bind ViewModel.RefreshCommand}" AutomationProperties.HelpText="按当前条件重新读取，快捷键 F5" />
+                <TextBlock Text="读取中…" Style="{StaticResource SkMutedTextStyle}"
+                    AutomationProperties.LiveSetting="Polite"
+                    Visibility="{x:Bind BoolToVisibility(ViewModel.IsLoading), Mode=OneWay}" />
+            </controls:WrapPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="搜索词已修改，按回车执行。" Style="{StaticResource SkWarningTextStyle}" TextWrapping="Wrap"
+                    Visibility="{x:Bind BoolToVisibility(ViewModel.HasUnsubmittedSearch), Mode=OneWay}" />
+                <TextBlock Text="{x:Bind ViewModel.Attention, Mode=OneWay}" Style="{StaticResource SkDangerTextStyle}"
+                    TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite"
+                    Visibility="{x:Bind BoolToVisibility(ViewModel.IsAttentionError), Mode=OneWay}" />
+                <TextBlock Text="{x:Bind ViewModel.Attention, Mode=OneWay}" Style="{StaticResource SkWarningTextStyle}"
+                    TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite"
+                    Visibility="{x:Bind BoolToVisibility(ViewModel.IsAttentionWarning), Mode=OneWay}" />
+            </StackPanel>
+        </StackPanel>
+
+        <controls:WrapPanel Grid.Row="2" RowSpacing="8" ColumnSpacing="12"
+            Visibility="{x:Bind ViewModel.PagerVisibility, Mode=OneWay}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="首页" Style="{StaticResource SkWorkspaceButtonStyle}" Command="{x:Bind ViewModel.FirstPageCommand}" IsEnabled="{x:Bind ViewModel.CanGoPrevious, Mode=OneWay}" />
+                <Button Content="上一页" Style="{StaticResource SkWorkspaceButtonStyle}" Command="{x:Bind ViewModel.PreviousPageCommand}" IsEnabled="{x:Bind ViewModel.CanGoPrevious, Mode=OneWay}" />
+                <Button Content="下一页" Style="{StaticResource SkWorkspaceButtonStyle}" Command="{x:Bind ViewModel.NextPageCommand}" IsEnabled="{x:Bind ViewModel.CanGoNext, Mode=OneWay}" />
+                <Button Content="末页" Style="{StaticResource SkWorkspaceButtonStyle}" Command="{x:Bind ViewModel.LastPageCommand}" IsEnabled="{x:Bind ViewModel.CanGoNext, Mode=OneWay}" />
+            </StackPanel>
+            <TextBlock Text="{x:Bind ViewModel.PagerText, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}"
+                VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+        </controls:WrapPanel>
+
+        <Grid Grid.Row="3">
+
+            <!-- ── 子标签 1 / 2：词条表 + 详情 ───────────────────────────── -->
+            <Grid
+                ColumnSpacing="0"
+                Visibility="{x:Bind ViewModel.TermListVisibility, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="TermListColumn" Width="1.4*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition x:Name="TermDetailColumn" Width="*" MinWidth="320" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource SkPanelStyle}" Padding="0">
+                    <ScrollViewer x:Name="TermTableScroller" HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                        VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled" HorizontalContentAlignment="Stretch">
+                    <Grid MinWidth="680" Width="{Binding ViewportWidth, ElementName=TermTableScroller, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid
+                            Grid.Row="0"
+                            MinHeight="36"
+                            ColumnSpacing="8"
+                            Padding="12,0"
+                            BorderBrush="{ThemeResource SkHairlineBrush}"
+                            Background="{ThemeResource SkSurfaceMutedBrush}"
+                            BorderThickness="0,0,0,1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.4*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.4*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="词条 / 词类" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="1" Text="日本語" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="2" Text="English" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="3" Text="简体" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="4" Text="繁體" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="5" Text="한국어" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="6" Text="可信 / 指标" Style="{StaticResource SkTableHeaderTextStyle}"
+                                ToolTipService.ToolTip="来源可信标记；提取用语另有置信、词频和证据指标" />
+                        </Grid>
+
+                        <ListView
+                            x:Name="TermList"
+                            Grid.Row="1"
+                            Padding="0" BorderThickness="0"
+                            ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            SelectionMode="Single"
+                            ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
+                            AutomationProperties.Name="用语词条列表">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:TermRow">
+                                    <Grid
+                                        MinHeight="34"
+                                        Padding="0,4"
+                                        ColumnSpacing="8"
+                                        Background="Transparent"
+                                        AutomationProperties.Name="{x:Bind RowAccessibleName}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.4*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.4*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Canonical}" Style="{StaticResource SkTableCellTextStyle}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock
+                                                    Text="{x:Bind Kind}"
+                                                    Style="{StaticResource SkTableCellSecondaryTextStyle}"
+                                                    Visibility="{x:Bind Kind, Converter={StaticResource HasTextToVis}}" />
+                                                <TextBlock
+                                                    Text="{x:Bind OfficialLabel}"
+                                                    Style="{StaticResource SkTableCellSecondaryTextStyle}"
+                                                    Visibility="{x:Bind OfficialLabel, Converter={StaticResource HasTextToVis}}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Ja, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" ToolTipService.ToolTip="{x:Bind Ja, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind En, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" ToolTipService.ToolTip="{x:Bind En, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="3" Text="{x:Bind ZhHans, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" ToolTipService.ToolTip="{x:Bind ZhHans, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="4" Text="{x:Bind ZhHant, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" ToolTipService.ToolTip="{x:Bind ZhHant, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="5" Text="{x:Bind Ko, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" ToolTipService.ToolTip="{x:Bind Ko, Converter={StaticResource EmptyCellToMissing}, ConverterParameter=term}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <StackPanel Grid.Column="6" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Trust}" Style="{StaticResource SkTableCellTextStyle}" />
+                                            <TextBlock
+                                                Text="{x:Bind Extra}"
+                                                Style="{StaticResource SkTableCellSecondaryTextStyle}"
+                                                Visibility="{x:Bind Extra, Converter={StaticResource HasTextToVis}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection />
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="MinHeight" Value="34" />
+                                    <Setter Property="Padding" Value="12,0" />
+                                    <Setter Property="Margin" Value="0" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+
+                        <!-- 四态覆盖层：空库 / 读取失败 / 筛选排空 / 表里真的没有 -->
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowNoStore), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="尚未选择本地数据库" Style="{StaticResource SkStrongTextStyle}" />
+                                <TextBlock Text="在设置中选择已有数据库后刷新。" Style="{StaticResource SkMutedTextStyle}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowListFailed), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="读取用语表失败。" Style="{StaticResource SkDangerTextStyle}" />
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.ListError, Mode=OneWay}"
+                                    Style="{StaticResource SkMutedTextStyle}"
+                                    IsTextSelectionEnabled="True" />
+                                <Button
+                                    Content="重试"
+                                    HorizontalAlignment="Center"
+                                    Command="{x:Bind ViewModel.RetryListCommand}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowListFilterEmpty), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="当前条件下没有匹配项" Style="{StaticResource SkStrongTextStyle}" />
+                                <Button
+                                    Content="清除筛选"
+                                    HorizontalAlignment="Center"
+                                    Command="{x:Bind ViewModel.ClearFilterCommand}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowListTableEmpty), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="尚未收录用语" Style="{StaticResource SkStrongTextStyle}" />
+                                <TextBlock Text="完成用语同步后刷新。" Style="{StaticResource SkMutedTextStyle}" />
+                                <Button
+                                    Content="重查"
+                                    HorizontalAlignment="Center"
+                                    Command="{x:Bind ViewModel.RetryListCommand}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- 一个受父级星号行约束的纵向阅读区，名称与证据都可完整换行。 -->
+                <controls:ColumnSplitHandle
+                    Grid.Column="1"
+                    Left="{x:Bind TermListColumn}" Right="{x:Bind TermDetailColumn}"
+                    MinRatio="0.42" MaxRatio="0.62" SettingsKey="terms" />
+                <Border Grid.Column="2" Style="{StaticResource SkPanelStyle}" Padding="12">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                        HorizontalScrollMode="Disabled" HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="12" Padding="0,0,12,0">
+                            <TextBlock Text="{x:Bind ViewModel.DetailTitle, Mode=OneWay}"
+                                Style="{StaticResource SkPageTitleTextStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            <Expander Header="词条信息" IsExpanded="False" Style="{StaticResource SkDetailExpanderStyle}"
+                                Visibility="{x:Bind ViewModel.DetailId, Mode=OneWay, Converter={StaticResource HasTextToVis}}"
+                                AutomationProperties.Name="展开词条标识">
+                                <StackPanel Spacing="4" Padding="16,16,16,12">
+                                    <TextBlock Text="ID" Style="{StaticResource SkSectionTextStyle}" />
+                                    <TextBlock Text="{x:Bind ViewModel.DetailId, Mode=OneWay}" Style="{StaticResource SkMonoTextStyle}"
+                                        TextWrapping="Wrap" TextTrimming="None" IsTextSelectionEnabled="True" />
+                                </StackPanel>
+                            </Expander>
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.NameRows, Mode=OneWay}"
+                                HorizontalContentAlignment="Stretch" AutomationProperties.Name="五语对照">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:LabelValue">
+                                        <Grid ColumnSpacing="8" Margin="0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="80" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind Label}" Style="{StaticResource SkSectionTextStyle}" TextWrapping="Wrap" />
+                                            <Grid Grid.Column="1">
+                                                <Border Background="{ThemeResource SkUnknownSoftBrush}"
+                                                    CornerRadius="{StaticResource SkChipCornerRadius}"
+                                                    Visibility="{x:Bind IsMissing, Converter={StaticResource BoolTrueToVis}}" />
+                                                <TextBlock Text="{x:Bind Value}" Style="{StaticResource SkBodyTextStyle}"
+                                                    TextWrapping="Wrap" TextTrimming="None" Padding="8,2" IsTextSelectionEnabled="True" />
+                                            </Grid>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{x:Bind ViewModel.NamesNote, Mode=OneWay}" Style="{StaticResource SkWarningTextStyle}"
+                                TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                Visibility="{x:Bind ViewModel.NamesNote, Mode=OneWay, Converter={StaticResource HasTextToVis}}" />
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="句级证据" Style="{StaticResource SkSectionTextStyle}" />
+                                <TextBlock Text="{x:Bind ViewModel.EvidenceSummary, Mode=OneWay}" Style="{StaticResource SkMutedTextStyle}"
+                                    TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                            <StackPanel Spacing="8" Visibility="{x:Bind BoolToVisibility(ViewModel.IsEvidenceFailed), Mode=OneWay}">
+                                <TextBlock Text="{x:Bind ViewModel.EvidenceError, Mode=OneWay}" Style="{StaticResource SkDangerTextStyle}"
+                                    TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                <Button Content="重试读取证据" Style="{StaticResource SkWorkspaceButtonStyle}"
+                                    Command="{x:Bind ViewModel.RetryEvidenceCommand}" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.Evidence, Mode=OneWay}"
+                                HorizontalContentAlignment="Stretch"
+                                Visibility="{x:Bind BoolToVisibility(ViewModel.HasEvidence), Mode=OneWay}"
+                                AutomationProperties.Name="句级证据列表">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:EvidenceRow">
+                                        <Border Margin="0,0,0,8" Padding="12,8"
+                                            Background="{ThemeResource SkSurfaceMutedBrush}" CornerRadius="{StaticResource SkChipCornerRadius}">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock Style="{StaticResource SkMutedTextStyle}">
+                                                    <Run Text="语言 · " /><Run Text="{x:Bind Language}" />
+                                                </TextBlock>
+                                                <TextBlock Text="{x:Bind StoryKey}" Style="{StaticResource SkMonoTextStyle}"
+                                                    TextWrapping="Wrap" TextTrimming="None" IsTextSelectionEnabled="True"
+                                                    AutomationProperties.Name="出处标识" />
+                                                <TextBlock Text="{x:Bind Sentence}" Style="{StaticResource SkProseTextStyle}"
+                                                    TextWrapping="Wrap" TextTrimming="None" IsTextSelectionEnabled="True" />
+                                                <Button Content="到剧情页定位" Style="{StaticResource SkWorkspaceButtonStyle}"
+                                                    Click="OnLocateEvidenceClick" Tag="{x:Bind StoryKey, Mode=OneTime}"
+                                                    AutomationProperties.HelpText="在剧情页搜索此出处标识" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- ── 子标签 3：官方译名 ─────────────────────────────────────── -->
+            <Grid
+                ColumnSpacing="12"
+                Visibility="{x:Bind ViewModel.TranslationVisibility, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="176" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 分类名称保留原值，长名称单行省略。 -->
+                <Border Grid.Column="0" Style="{StaticResource SkPanelStyle}" Padding="0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border
+                            Grid.Row="0"
+                            BorderBrush="{ThemeResource SkHairlineBrush}"
+                            Background="{ThemeResource SkSurfaceMutedBrush}"
+                            BorderThickness="0,0,0,1">
+                            <TextBlock Text="分类" Style="{StaticResource SkTableHeaderTextStyle}" Padding="12,8" />
+                        </Border>
+                        <ListView Grid.Row="1" SelectionMode="Single"
+                            ItemsSource="{x:Bind ViewModel.Namespaces, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedNamespace, Mode=TwoWay}"
+                            ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            AutomationProperties.Name="官方译名分类">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:TranslationNamespace">
+                                    <StackPanel Padding="0,4" ToolTipService.ToolTip="{x:Bind Namespace}" AutomationProperties.Name="{x:Bind Label}">
+                                        <TextBlock Text="{x:Bind Namespace}" Style="{StaticResource SkTableCellTextStyle}"
+                                            TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind views:TermsPage.NamespaceSummary(Rows, Missing)}"
+                                            Style="{StaticResource SkTableCellSecondaryTextStyle}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection />
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="Padding" Value="12,0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowNoStore), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="尚未载入分类" Style="{StaticResource SkMutedTextStyle}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowNamespaceFailed), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="分类读取失败" Style="{StaticResource SkDangerTextStyle}" TextWrapping="Wrap" />
+                                <Button
+                                    Content="重试"
+                                    HorizontalAlignment="Center"
+                                    Command="{x:Bind ViewModel.RetryTranslationCommand}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- 表头与数据行共用横向视口，保留五语阅读宽度。 -->
+                <Border Grid.Column="1" Style="{StaticResource SkPanelStyle}" Padding="0">
+                    <ScrollViewer x:Name="TranslationTableScroller" HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                        VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled" HorizontalContentAlignment="Stretch">
+                    <Grid MinWidth="640" Width="{Binding ViewportWidth, ElementName=TranslationTableScroller, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid
+                            Grid.Row="0"
+                            MinHeight="36"
+                            ColumnSpacing="8"
+                            Padding="12,0"
+                            BorderBrush="{ThemeResource SkHairlineBrush}"
+                            Background="{ThemeResource SkSurfaceMutedBrush}"
+                            BorderThickness="0,0,0,1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.3*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="标识" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="1" Text="日本語" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="2" Text="English" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="3" Text="简体" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="4" Text="繁體" Style="{StaticResource SkTableHeaderTextStyle}" />
+                            <TextBlock Grid.Column="5" Text="한국어" Style="{StaticResource SkTableHeaderTextStyle}" />
+                        </Grid>
+
+                        <!-- 这一屏没有分页栏：命中数与截断只能靠这一行说实话（截断时升为警告强度） -->
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource SkWarningSoftBrush}"
+                            Padding="12,4"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.IsTranslationTruncated), Mode=OneWay}">
+                            <TextBlock
+                                Text="{x:Bind ViewModel.TranslationLimitNote, Mode=OneWay}"
+                                Style="{StaticResource SkWarningTextStyle}" TextWrapping="Wrap"
+                                AutomationProperties.LiveSetting="Polite" />
+                        </Border>
+                        <TextBlock
+                            Grid.Row="1"
+                            Text="{x:Bind ViewModel.TranslationLimitNote, Mode=OneWay}"
+                            Style="{StaticResource SkMutedTextStyle}"
+                            Padding="12,4"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowTranslationNotePlain), Mode=OneWay}"
+                            AutomationProperties.LiveSetting="Polite" />
+
+                        <ListView
+                            Grid.Row="2"
+                            Padding="0" BorderThickness="0"
+                            SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnTranslationItemClick"
+                            ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            ItemsSource="{x:Bind ViewModel.TranslationRows, Mode=OneWay}"
+                            AutomationProperties.Name="官方译名对照表"
+                            AutomationProperties.HelpText="点击条目或按回车查看完整五语译名">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:TranslationNameRow">
+                                    <Grid
+                                        MinHeight="34"
+                                        Padding="0,4"
+                                        ColumnSpacing="8"
+                                        Background="Transparent"
+                                        AutomationProperties.Name="{x:Bind RowAccessibleName}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.3*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind Key}" ToolTipService.ToolTip="{x:Bind Key}" Style="{StaticResource SkTableCellSecondaryTextStyle}" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Ja, Converter={StaticResource EmptyCellToMissing}}" ToolTipService.ToolTip="{x:Bind Ja, Converter={StaticResource EmptyCellToMissing}}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind En, Converter={StaticResource EmptyCellToMissing}}" ToolTipService.ToolTip="{x:Bind En, Converter={StaticResource EmptyCellToMissing}}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="3" Text="{x:Bind ZhHans, Converter={StaticResource EmptyCellToMissing}}" ToolTipService.ToolTip="{x:Bind ZhHans, Converter={StaticResource EmptyCellToMissing}}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="4" Text="{x:Bind ZhHant, Converter={StaticResource EmptyCellToMissing}}" ToolTipService.ToolTip="{x:Bind ZhHant, Converter={StaticResource EmptyCellToMissing}}" Style="{StaticResource SkTableCellTextStyle}" />
+                                        <TextBlock Grid.Column="5" Text="{x:Bind Ko, Converter={StaticResource EmptyCellToMissing}}" ToolTipService.ToolTip="{x:Bind Ko, Converter={StaticResource EmptyCellToMissing}}" Style="{StaticResource SkTableCellTextStyle}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection />
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="MinHeight" Value="34" />
+                                    <Setter Property="Padding" Value="12,0" />
+                                    <Setter Property="Margin" Value="0" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+
+                        <Border
+                            Grid.Row="2"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowNoStore), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="尚未选择本地数据库" Style="{StaticResource SkStrongTextStyle}" />
+                                <TextBlock Text="在设置中选择已有数据库后刷新。" Style="{StaticResource SkMutedTextStyle}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="2"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowTranslationFailed), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="读取官方译名字典失败。" Style="{StaticResource SkDangerTextStyle}" />
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.TranslationError, Mode=OneWay}"
+                                    Style="{StaticResource SkMutedTextStyle}"
+                                    IsTextSelectionEnabled="True" />
+                                <Button
+                                    Content="重试"
+                                    HorizontalAlignment="Center"
+                                    Command="{x:Bind ViewModel.RetryTranslationCommand}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="2"
+                            Background="{ThemeResource SkSurfaceBrush}"
+                            Visibility="{x:Bind BoolToVisibility(ViewModel.ShowTranslationFilterEmpty), Mode=OneWay}">
+                            <StackPanel Style="{StaticResource SkStatePanelStyle}">
+                                <TextBlock Text="当前条件下未收录匹配译名" Style="{StaticResource SkStrongTextStyle}" />
+                                <TextBlock Text="更换分类或搜索词，也可清除筛选。" Style="{StaticResource SkMutedTextStyle}" />
+                                <Button
+                                    Content="清除筛选"
+                                    HorizontalAlignment="Center"
+                                    Command="{x:Bind ViewModel.ClearFilterCommand}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- 辅助内容默认收起，不占译名表的列宽。 -->
+                <Expander Grid.Row="1" Grid.ColumnSpan="2" Header="译文覆盖" IsExpanded="False"
+                    Margin="0,8,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    AutomationProperties.Name="展开剧情译文覆盖与预览">
+                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled" HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="8" Padding="0,0,12,0">
+                            <TextBlock
+                                Text="{x:Bind ViewModel.OverlayCoverage, Mode=OneWay}"
+                                Style="{StaticResource SkMutedTextStyle}"
+                                AutomationProperties.LiveSetting="Polite" />
+
+                            <StackPanel Spacing="4" Visibility="{x:Bind BoolToVisibility(ViewModel.ShowOverlayFailed), Mode=OneWay}">
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.OverlayError, Mode=OneWay}"
+                                    Style="{StaticResource SkDangerTextStyle}" TextWrapping="Wrap"
+                                    IsTextSelectionEnabled="True" />
+                                <Button
+                                    Content="重试读取覆盖层"
+                                    HorizontalAlignment="Left"
+                                    Command="{x:Bind ViewModel.RetryTranslationCommand}" />
+                            </StackPanel>
+
+                            <ItemsControl
+                                ItemsSource="{x:Bind ViewModel.OverlayStatus, Mode=OneWay}"
+                                AutomationProperties.Name="覆盖层按译文来源的统计">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:LabelValue">
+                                        <Grid ColumnSpacing="8" Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="150" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{x:Bind Label}" Style="{StaticResource SkMutedTextStyle}" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Value}" Style="{StaticResource SkBodyTextStyle}" IsTextSelectionEnabled="True" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="剧情译文预览" Style="{StaticResource SkSectionTextStyle}" Margin="0,8,0,0" />
+                            <ItemsControl
+                                ItemsSource="{x:Bind ViewModel.Overlays, Mode=OneWay}"
+                                AutomationProperties.Name="剧情级译文覆盖层预览">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:OverlayRow">
+                                        <Border
+                                            Margin="0,0,0,6"
+                                            Padding="10,8"
+                                            Background="{ThemeResource SkSurfaceMutedBrush}"
+                                            CornerRadius="{StaticResource SkChipCornerRadius}">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="{x:Bind Title}" Style="{StaticResource SkBodyTextStyle}" TextWrapping="Wrap" TextTrimming="None" IsTextSelectionEnabled="True" />
+                                                <TextBlock Style="{StaticResource SkMutedTextStyle}">
+                                                    <Run Text="{x:Bind InstanceBadge}" /><Run Text=" · " /><Run Text="{x:Bind RegionLabel}" /><Run Text=" · " /><Run Text="{x:Bind TranslationSource}" /><Run Text=" · " /><Run Text="{x:Bind StatusLabel}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Expander>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

@@ -1,0 +1,73 @@
+# ---- .NET / MSBuild 产物 ----
+bin/
+obj/
+dist/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM64/
+AppPackages/
+BundleArtifacts/
+*.binlog
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.msixupload
+
+# ---- NuGet ----
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+
+# ---- IDE ----
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+*.sln.docstates
+
+# ---- 测试与覆盖率 ----
+[Tt]est[Rr]esult*/
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# ---- 诊断 ----
+*.log
+*.dmp
+*.tmp
+.tmp/
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 开发过程件：留在磁盘，不进版本库 ----
+#
+# 这一节的判据来自主仓 sekaisync 的同类决定（commit 52b6bc8
+# "keep development process out of the published tree"）：`.workbuddy/`、`docs/`、
+# `HANDOFF.md`、`work/` 在主仓里全部不入库。本仓照此把「agent 干活留下的痕迹」
+# 与「程序源码」切开，两边各得其所。
+#
+# .workbuddy/ —— 外部 agent 工具自己的工位：audit/ 是逐页审计与实施契约，
+#   memory/ 是它的日记，repair/patchchain/ 是 2026-09-12 与 09-20 两次事故恢复
+#   用掉的一次性脚本（34 个带时间戳的 .py）。
+#   移出 git 的直接理由：这些文件里大量写着维护机的绝对路径
+#   （用户目录与本地工程目录），而产品源码零命中。
+#   文件不删，仍在磁盘上可查。
+.workbuddy/
+# 逐轮 UI 验收的截图：19 MB 二进制，随时能重拍，进库只会拖慢每次检出。
+screenshots/
+# 一次性量测脚本（量漂流密度、量折叠面板内缩）。带写死的窗口标题和一次性
+# 参数，复用价值低。对应主仓的 scripts/repo-split/ 处理法。
+# 判据：主仓把「可复用脚本」与「一次性手术」分开，后者隔离进子目录再忽略。
+tools/oneshot/
