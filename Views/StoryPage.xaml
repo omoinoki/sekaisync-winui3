@@ -380,8 +380,9 @@
                             VerticalScrollBarVisibility="Auto"
                             HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
                             Visibility="{x:Bind BoolToVisibility(ViewModel.ShowSingleBody), Mode=OneWay}">
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.DetailBlocks, Mode=OneWay}">
-                                <ItemsControl.ItemTemplate>
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.DetailBlocks, Mode=OneWay}">
+                                <ItemsRepeater.Layout><StackLayout /></ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="models:DialogueBlock">
                                         <StackPanel Margin="0,0,0,8">
                                             <TextBlock
@@ -407,8 +408,8 @@
                                                         </Border>
                                                     </StackPanel>
                                                 </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                            </ItemsRepeater.ItemTemplate>
+                                        </ItemsRepeater>
                         </ScrollViewer>
 
                         <!-- 对照：范围标签固定在上方，栏区自身双向滚动——
@@ -461,8 +462,9 @@
                                                             TextWrapping="Wrap"
                                                             Style="{StaticResource SkMutedTextStyle}"
                                                             Visibility="{x:Bind MissingVisibility}" />
-                                                        <ItemsControl ItemsSource="{x:Bind Blocks}" Visibility="{x:Bind ContentVisibility}">
-                                                            <ItemsControl.ItemTemplate>
+                                                        <ItemsRepeater ItemsSource="{x:Bind Blocks}" Visibility="{x:Bind ContentVisibility}">
+                                                            <ItemsRepeater.Layout><StackLayout /></ItemsRepeater.Layout>
+                                                            <ItemsRepeater.ItemTemplate>
                                                                 <DataTemplate x:DataType="models:DialogueBlock">
                                                                     <StackPanel Margin="0,0,0,6">
                                                                         <TextBlock
@@ -486,8 +488,8 @@
                                                                                     </Border>
                                                                                 </StackPanel>
                                                                             </DataTemplate>
-                                                                        </ItemsControl.ItemTemplate>
-                                                                    </ItemsControl>
+                                                                        </ItemsRepeater.ItemTemplate>
+                                                                    </ItemsRepeater>
                                                                     </StackPanel>
                                                                 </Border>
                                                             </DataTemplate>

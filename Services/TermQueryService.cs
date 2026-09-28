@@ -54,17 +54,18 @@ public sealed class TermQueryService
         => QueryTermsAsync(table, search, offset, limit, TermFilter.None, ct);
 
     public Task<PagedResult<TermRow>> QueryTermsAsync(string table, string search, int offset, int limit, TermFilter filter, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
+            SqliteAccess.ValidatePage(offset, limit);
             var stopwatch = Stopwatch.StartNew();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             using var command = connection.CreateCommand();
             var where = BuildTermWhere(command, table, search, filter);
             command.CommandText = $"SELECT {TermColumns(table)} FROM {SqliteAccess.Quote(table)} WHERE {where} " +
                                   "ORDER BY canonical LIMIT @limit OFFSET @offset";
-            command.Parameters.AddWithValue("@limit", limit);
+            command.Parameters.AddWithValue("@limit", limit + 1);
             command.Parameters.AddWithValue("@offset", offset);
 
             var rows = new List<TermRow>(limit);
@@ -72,20 +73,23 @@ public sealed class TermQueryService
             {
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     rows.Add(ReadTermRow(reader, table));
-                    if (rows.Count >= limit)
+                    if (rows.Count > limit)
                     {
                         break;
                     }
                 }
             }
 
+            var hasMore = rows.Count > limit;
+            if (hasMore) rows.RemoveAt(rows.Count - 1);
             stopwatch.Stop();
             return new PagedResult<TermRow>
             {
                 Items = rows,
                 Offset = offset,
-                HasMore = rows.Count >= limit,
+                HasMore = hasMore,
                 ElapsedMilliseconds = stopwatch.ElapsedMilliseconds,
             };
         }, ct);
@@ -94,9 +98,9 @@ public sealed class TermQueryService
         => CountTermsAsync(table, search, TermFilter.None, ct);
 
     public Task<long> CountTermsAsync(string table, string search, TermFilter filter, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             var where = BuildTermWhere(command, table, search, filter);
@@ -174,9 +178,9 @@ public sealed class TermQueryService
 
     /// <summary>取某条用语的完整 names_json（列表里只有预览）。</summary>
     public Task<string> LoadNamesJsonAsync(string table, string id, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText = $"SELECT names_json FROM {SqliteAccess.Quote(table)} WHERE id = @id";
@@ -195,9 +199,9 @@ public sealed class TermQueryService
     /// 失败一律抛出，由 ViewModel 渲染「读取失败 + 重试」。
     /// </summary>
     public Task<IReadOnlyList<EvidenceRow>> LoadEvidenceAsync(string termId, int limit = 60, CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<EvidenceRow>>(() =>
+        => SqliteAccess.Run<IReadOnlyList<EvidenceRow>>(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText =
@@ -227,9 +231,9 @@ public sealed class TermQueryService
     /// 不能拿已加载的条数当规模（同剧情页「300 条」那个错）。
     /// </summary>
     public Task<long> CountEvidenceAsync(string termId, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT COUNT(*) FROM term_evidence WHERE term_id = @id";
@@ -250,13 +254,13 @@ public sealed class TermQueryService
 
     /// <summary>按实例（source）与语言收窄的同一份字典。失败一律抛出，不返回空集合。</summary>
     public Task<IReadOnlyList<TranslationNameRow>> LoadTranslationNamesAsync(TermFilter filter, CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<TranslationNameRow>>(() =>
+        => SqliteAccess.Run<IReadOnlyList<TranslationNameRow>>(() =>
         {
             // namespace → language → (key → value)
             var buckets = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>(StringComparer.Ordinal);
             var keyOrder = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
-            using (var connection = SqliteAccess.Open(DatabasePath))
+            using (var connection = SqliteAccess.Open(DatabasePath, ct))
             {
                 ct.ThrowIfCancellationRequested();
                 using var command = connection.CreateCommand();
@@ -264,6 +268,7 @@ public sealed class TermQueryService
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     var ns = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
                     var language = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
                     var text = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
@@ -378,10 +383,11 @@ public sealed class TermQueryService
         => QueryOverlaysAsync(offset, limit, TermFilter.None, ct);
 
     public Task<PagedResult<OverlayRow>> QueryOverlaysAsync(int offset, int limit, TermFilter filter, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
+            SqliteAccess.ValidatePage(offset, limit);
             var stopwatch = Stopwatch.StartNew();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             using var command = connection.CreateCommand();
@@ -389,7 +395,7 @@ public sealed class TermQueryService
                 "SELECT source, id, title, language, translation_source, trust, length(text) " +
                 "FROM web_pages WHERE overlay = 1" + OverlayWhere(command, filter) +
                 " ORDER BY source, id LIMIT @limit OFFSET @offset";
-            command.Parameters.AddWithValue("@limit", limit);
+            command.Parameters.AddWithValue("@limit", limit + 1);
             command.Parameters.AddWithValue("@offset", offset);
 
             var rows = new List<OverlayRow>(limit);
@@ -397,6 +403,7 @@ public sealed class TermQueryService
             {
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     var language = reader.IsDBNull(3) ? string.Empty : reader.GetString(3);
                     var translationSource = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
                     var trust = reader.IsDBNull(5) ? string.Empty : reader.GetString(5);
@@ -416,19 +423,21 @@ public sealed class TermQueryService
                         Length = reader.IsDBNull(6) ? 0 : reader.GetInt64(6),
                     });
 
-                    if (rows.Count >= limit)
+                    if (rows.Count > limit)
                     {
                         break;
                     }
                 }
             }
 
+            var hasMore = rows.Count > limit;
+            if (hasMore) rows.RemoveAt(rows.Count - 1);
             stopwatch.Stop();
             return new PagedResult<OverlayRow>
             {
                 Items = rows,
                 Offset = offset,
-                HasMore = rows.Count >= limit,
+                HasMore = hasMore,
                 ElapsedMilliseconds = stopwatch.ElapsedMilliseconds,
             };
         }, ct);
@@ -437,9 +446,9 @@ public sealed class TermQueryService
         => CountOverlaysAsync(TermFilter.None, ct);
 
     public Task<long> CountOverlaysAsync(TermFilter filter, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT COUNT(*) FROM web_pages WHERE overlay = 1" + OverlayWhere(command, filter);
@@ -452,10 +461,10 @@ public sealed class TermQueryService
 
     /// <summary>带实例/语言收窄的同一统计。失败一律抛出（界面据此出「读取失败 + 重试」）。</summary>
     public Task<IReadOnlyList<LabelValue>> LoadOverlayStatusAsync(TermFilter filter, CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<LabelValue>>(() =>
+        => SqliteAccess.Run<IReadOnlyList<LabelValue>>(() =>
         {
             var rows = new List<LabelValue>();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText =
@@ -510,9 +519,9 @@ public sealed class TermQueryService
 
     /// <summary>把覆盖层的正文取出来（详情用）。</summary>
     public Task<string> LoadOverlayTextAsync(string id, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT text FROM web_pages WHERE id = @id AND overlay = 1 LIMIT 1";

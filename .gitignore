@@ -71,3 +71,6 @@ screenshots/
 # 参数，复用价值低。对应主仓的 scripts/repo-split/ 处理法。
 # 判据：主仓把「可复用脚本」与「一次性手术」分开，后者隔离进子目录再忽略。
 tools/oneshot/
+
+# Maintainer-only documentation and preserved public-document excerpts.
+/.maintainer/

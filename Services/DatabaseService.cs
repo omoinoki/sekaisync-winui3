@@ -148,12 +148,20 @@ public sealed class DatabaseService
 
     /// <summary>分页读取一个表；search 非空时在预设列上做 LIKE 过滤。</summary>
     public Task<DbQueryResult> QueryPageAsync(DbTableInfo table, string search, int offset, int limit, CancellationToken cancellationToken = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var conn = OpenConnection();
+            SqliteAccess.ValidatePage(offset, limit);
+            using var conn = OpenConnection(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            var columnList = string.Join(", ", table.Columns.Select(c => Quote(c.Name)));
+            // Fetch bounded display values, with independent full identity columns.
+            // Full text remains available only when the user selects a row.
+            var pkColumns = table.Columns.Where(c => c.IsPrimaryKey).ToArray();
+            var columnList = string.Join(", ", table.Columns.Select(c =>
+                $"CASE typeof({Quote(c.Name)}) WHEN 'text' THEN substr(CAST({Quote(c.Name)} AS BLOB), 1, {4 * (CellPreviewLength + 1)}) " +
+                $"WHEN 'blob' THEN '[BLOB ' || length({Quote(c.Name)}) || ' bytes]' ELSE {Quote(c.Name)} END AS {Quote(c.Name)}"));
+            var keyColumns = pkColumns.Length > 0 ? string.Join(", ", pkColumns.Select(c => Quote(c.Name))) : "rowid";
+            columnList += ", " + keyColumns;
             var sql = new StringBuilder($"SELECT {columnList} FROM {Quote(table.Name)}");
 
             var parameters = new List<(string Name, object Value)>();
@@ -175,7 +183,7 @@ public sealed class DatabaseService
                 ? table.SortColumns
                 : table.Columns.Where(c => c.IsPrimaryKey).Select(c => c.Name).ToArray();
             var orderBy = orderColumns.Count > 0
-                ? string.Join(", ", orderColumns.Select(Quote))
+                ? string.Join(", ", orderColumns.Select(c => Quote(table.Name) + "." + Quote(c)))
                 : "rowid";
             sql.Append($" ORDER BY {orderBy} LIMIT @limit OFFSET @offset");
             // 多取一行来判断「还有下一页」：原先 limit 行取满就算 HasMore，
@@ -193,23 +201,22 @@ public sealed class DatabaseService
             var stopwatch = Stopwatch.StartNew();
             var cells = new List<string[]>();
             var keys = new List<string[]>();
-            var pkIndexes = table.Columns
-                .Select((c, i) => (c, i))
-                .Where(pair => pair.c.IsPrimaryKey)
-                .Select(pair => pair.i)
-                .ToArray();
+            var keyCount = Math.Max(1, pkColumns.Length);
 
             using (var reader = cmd.ExecuteReader())
             {
                 while (reader.Read())
                 {
-                    var row = new string[reader.FieldCount];
-                    for (var i = 0; i < reader.FieldCount; i++)
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var row = new string[table.Columns.Count];
+                    for (var i = 0; i < row.Length; i++)
                     {
                         row[i] = FormatPreview(reader.IsDBNull(i) ? null : reader.GetValue(i));
                     }
                     cells.Add(row);
-                    keys.Add(pkIndexes.Select(i => row[i]).ToArray());
+                    keys.Add(Enumerable.Range(table.Columns.Count, keyCount)
+                        .Select(i => Convert.ToString(reader.GetValue(i), System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)
+                        .ToArray());
                     if (cells.Count > limit)
                     {
                         break;
@@ -239,23 +246,26 @@ public sealed class DatabaseService
         }, cancellationToken);
 
     /// <summary>按主键取一行完整数据，用于详情面板。</summary>
-    public Task<DbDetailField[]> GetRowDetailAsync(DbTableInfo table, string[] keys)
-        => Task.Run(() =>
+    public Task<DbDetailField[]> GetRowDetailAsync(DbTableInfo table, string[] keys, CancellationToken ct = default)
+        => SqliteAccess.Run(() =>
         {
-            using var conn = OpenConnection();
+            using var conn = OpenConnection(ct);
 
             var pkColumns = table.Columns.Where(c => c.IsPrimaryKey).ToArray();
             var where = string.Join(" AND ", pkColumns.Select((c, i) => $"{Quote(c.Name)} = @k{i}"));
-            if (pkColumns.Length == 0 || pkColumns.Length != keys.Length)
+            if (pkColumns.Length == 0)
             {
-                // 无主键表退化为顺序定位：按排序键 OFFSET 取。
-                return DetailByPosition(conn, table, keys);
+                where = "rowid = @k0";
+            }
+            if (keys.Length != Math.Max(1, pkColumns.Length))
+            {
+                return [new DbDetailField("(提示)", "未能定位该行，请刷新列表。", false)];
             }
 
             var columnList = string.Join(", ", table.Columns.Select(c => Quote(c.Name)));
             using var cmd = conn.CreateCommand();
             cmd.CommandText = $"SELECT {columnList} FROM {Quote(table.Name)} WHERE {where}";
-            for (var i = 0; i < pkColumns.Length; i++)
+            for (var i = 0; i < keys.Length; i++)
             {
                 cmd.Parameters.AddWithValue($"@k{i}", keys[i]);
             }
@@ -263,11 +273,11 @@ public sealed class DatabaseService
             using var reader = cmd.ExecuteReader();
             if (!reader.Read())
             {
-                return DetailByPosition(conn, table, keys);
+                return [new DbDetailField("(提示)", "该行已变更或移除，请刷新列表。", false)];
             }
 
             return EnumerateFields(table, reader);
-        });
+        }, ct);
 
     /// <summary>取某条用语的句级证据（term_evidence），最多 50 条。</summary>
     public Task<List<GlossaryEvidence>> GetEvidenceAsync(string termId)
@@ -297,23 +307,6 @@ public sealed class DatabaseService
             return list;
         });
 
-    private static DbDetailField[] DetailByPosition(SqliteConnection conn, DbTableInfo table, string[] keys)
-    {
-        var orderColumns = table.SortColumns.Count > 0 ? table.SortColumns : ["rowid"];
-        var orderBy = string.Join(", ", orderColumns.Select(Quote));
-        var columnList = string.Join(", ", table.Columns.Select(c => Quote(c.Name)));
-
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {columnList} FROM {Quote(table.Name)} ORDER BY {orderBy} LIMIT 1 OFFSET @offset";
-        cmd.Parameters.AddWithValue("@offset", ParseOffset(keys));
-
-        using var reader = cmd.ExecuteReader();
-        return reader.Read() ? EnumerateFields(table, reader) : [new DbDetailField("(提示)", "未能定位该行。", false)];
-    }
-
-    private static int ParseOffset(string[] keys)
-        => keys.Length > 0 && int.TryParse(keys[^1], out var value) ? Math.Max(0, value) : 0;
-
     private static DbDetailField[] EnumerateFields(DbTableInfo table, SqliteDataReader reader)
     {
         var fields = new DbDetailField[reader.FieldCount];
@@ -339,12 +332,13 @@ public sealed class DatabaseService
     /// 失败统一包装成 <see cref="DatabaseUnreachableException"/>，让界面能说「以只读方式打开失败：<原因>」
     /// 而不是把它混进「查询失败」——只读是对外承诺，伪装成读得出问题是掩盖它。
     /// </summary>
-    private SqliteConnection OpenConnection()
+    private SqliteConnection OpenConnection(CancellationToken ct = default)
     {
         try
         {
-            return SqliteAccess.Open(DatabasePath);
+            return SqliteAccess.Open(DatabasePath, ct);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             throw new DatabaseUnreachableException(
@@ -369,7 +363,7 @@ public sealed class DatabaseService
         return columns;
     }
 
-    private static string Quote(string identifier) => "[" + identifier.Replace("]", "]]") + "]";
+    private static string Quote(string identifier) => SqliteAccess.Quote(identifier);
 
     private static string EscapeLike(string value)
         => value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
@@ -379,6 +373,10 @@ public sealed class DatabaseService
         var text = value switch
         {
             null => string.Empty,
+            // SQL fetched a bounded UTF-8 byte prefix for TEXT; unlike substr(TEXT),
+            // this preserves embedded NULs. Four bytes per requested UTF-16 unit
+            // guarantee any partial trailing scalar lies after the display cutoff.
+            byte[] utf8 => Encoding.UTF8.GetString(utf8),
             string s => s,
             IFormattable f => f.ToString() ?? string.Empty,
             _ => value.ToString() ?? string.Empty,

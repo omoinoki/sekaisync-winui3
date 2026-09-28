@@ -39,6 +39,7 @@ public partial class DatabaseViewModel : ObservableObject
 
     private readonly DatabaseService _database = AppServices.Database;
     private CancellationTokenSource? _queryCts;
+    private CancellationTokenSource? _detailCts;
     private int _offset;
     private bool _hasMore;
     private bool _initializing;
@@ -142,7 +143,7 @@ public partial class DatabaseViewModel : ObservableObject
     private string _detailTitle = "行详情";
 
     [ObservableProperty]
-    private int _pageSize = Math.Max(50, AppServices.Settings.PageSize);
+    private int _pageSize = Math.Clamp(AppServices.Settings.PageSize, 50, 1000);
 
     public int[] PageSizeOptions { get; } = [50, 100, 200, 500, 1000];
 
@@ -180,7 +181,7 @@ public partial class DatabaseViewModel : ObservableObject
 
     private void OnSettingsSaved()
     {
-        var configured = Math.Max(50, AppServices.Settings.PageSize);
+        var configured = Math.Clamp(AppServices.Settings.PageSize, 50, 1000);
         if (configured != PageSize)
         {
             // 走 OnPageSizeChanged → 重新查第一页。
@@ -518,6 +519,7 @@ public partial class DatabaseViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (cts.IsCancellationRequested) return;
             Rows.Clear();
             SelectedRow = null;
             PagerText = "未取得行，请刷新重试。";
@@ -535,6 +537,7 @@ public partial class DatabaseViewModel : ObservableObject
 
     partial void OnSelectedRowChanged(DbRowItem? value)
     {
+        _detailCts?.Cancel();
         OnPropertyChanged(nameof(HasSelectedRow));
         OnPropertyChanged(nameof(HasNoSelectedRow));
         RowDetail = [];
@@ -553,9 +556,11 @@ public partial class DatabaseViewModel : ObservableObject
         {
             return;
         }
+        using var cts = new CancellationTokenSource();
+        _detailCts = cts;
         try
         {
-            var fields = await _database.GetRowDetailAsync(info, row.Keys);
+            var fields = await _database.GetRowDetailAsync(info, row.Keys, cts.Token);
             if (!ReferenceEquals(SelectedRow, row) || !ReferenceEquals(CurrentTable, info))
             {
                 return;
@@ -566,6 +571,7 @@ public partial class DatabaseViewModel : ObservableObject
             DetailTitle = $"行详情 — {info.DisplayName}";
             DetailHintText = fields.Length == 0 ? "未读到字段，可刷新后重新选择。" : string.Empty;
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             // 已切换行或表时，旧请求的错误也不能覆盖新选择。
@@ -577,6 +583,10 @@ public partial class DatabaseViewModel : ObservableObject
             DetailTitle = "行详情";
             DetailHintText = "字段读取失败，查看上方原因后重试。";
             SurfaceError(ex, "读取详情失败");
+        }
+        finally
+        {
+            if (ReferenceEquals(_detailCts, cts)) _detailCts = null;
         }
     }
 

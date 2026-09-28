@@ -78,10 +78,11 @@ public sealed class ContentQueryService
         "t.untranslated, t.translation_source, t.trust, t.canonical_key";
 
     public Task<PagedResult<StoryRow>> QueryStoriesAsync(StoryQuery query, int offset, int limit, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
+            SqliteAccess.ValidatePage(offset, limit);
             var stopwatch = Stopwatch.StartNew();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             using var command = connection.CreateCommand();
@@ -89,7 +90,7 @@ public sealed class ContentQueryService
             command.CommandText =
                 $"SELECT {StoryColumns} FROM web_pages t WHERE {where} " +
                 "ORDER BY t.source, t.id LIMIT @limit OFFSET @offset";
-            command.Parameters.AddWithValue("@limit", limit);
+            command.Parameters.AddWithValue("@limit", limit + 1);
             command.Parameters.AddWithValue("@offset", offset);
 
             var rows = new List<StoryRow>(limit);
@@ -97,29 +98,32 @@ public sealed class ContentQueryService
             {
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     rows.Add(ReadStoryRow(reader));
-                    if (rows.Count >= limit)
+                    if (rows.Count > limit)
                     {
                         break;
                     }
                 }
             }
 
+            var hasMore = rows.Count > limit;
+            if (hasMore) rows.RemoveAt(rows.Count - 1);
             stopwatch.Stop();
             return new PagedResult<StoryRow>
             {
                 Items = rows,
                 Offset = offset,
-                HasMore = rows.Count >= limit,
+                HasMore = hasMore,
                 ElapsedMilliseconds = stopwatch.ElapsedMilliseconds,
             };
         }, ct);
 
     /// <summary>总数。只带 source + kind 时能走覆盖索引，毫秒级；带语言/搜索会慢一些。</summary>
     public Task<long> CountStoriesAsync(StoryQuery query, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             var where = BuildWhere(command, query.Kinds, query.Instance, query.Language, query.Search, query.OnlyUntranslated, "t");
@@ -183,9 +187,9 @@ public sealed class ContentQueryService
 
     /// <summary>取一整行的正文并拆成对白。</summary>
     public Task<StoryDetail?> LoadStoryAsync(string source, string id, CancellationToken ct = default)
-        => Task.Run<StoryDetail?>(() =>
+        => SqliteAccess.Run<StoryDetail?>(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             using var command = connection.CreateCommand();
@@ -213,7 +217,7 @@ public sealed class ContentQueryService
             var languageMismatch = !reader.IsDBNull(13) && reader.GetInt64(13) != 0;
             var region = SourceModel.RegionByLanguage(language);
 
-            var blocks = TextRenderer.ParseDialogue(text, overlay);
+            var blocks = TextRenderer.ParseDialogue(text, overlay, ct);
 
             var notes = new List<string>();
             if (assetMismatch.Length > 0)
@@ -250,10 +254,11 @@ public sealed class ContentQueryService
     // ─────────────────────────────────────────────────────────────────────────
 
     public Task<PagedResult<VoiceRow>> QueryVoicesAsync(VoiceQuery query, int offset, int limit, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
+            SqliteAccess.ValidatePage(offset, limit);
             var stopwatch = Stopwatch.StartNew();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             using var command = connection.CreateCommand();
@@ -263,7 +268,7 @@ public sealed class ContentQueryService
             command.CommandText =
                 "SELECT t.source, t.id, t.kind, t.language, t.crawled_at, substr(t.text, 1, 400), t.canonical_key " +
                 $"FROM web_pages t WHERE {where} ORDER BY t.source, t.id LIMIT @limit OFFSET @offset";
-            command.Parameters.AddWithValue("@limit", limit);
+            command.Parameters.AddWithValue("@limit", limit + 1);
             command.Parameters.AddWithValue("@offset", offset);
 
             var rows = new List<VoiceRow>(limit);
@@ -271,6 +276,7 @@ public sealed class ContentQueryService
             {
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     var kind = reader.GetString(2);
                     var language = reader.GetString(3);
                     var crawledAt = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
@@ -294,27 +300,29 @@ public sealed class ContentQueryService
                         AlignmentKey = SourceModel.AlignmentKey(id),
                     });
 
-                    if (rows.Count >= limit)
+                    if (rows.Count > limit)
                     {
                         break;
                     }
                 }
             }
 
+            var hasMore = rows.Count > limit;
+            if (hasMore) rows.RemoveAt(rows.Count - 1);
             stopwatch.Stop();
             return new PagedResult<VoiceRow>
             {
                 Items = rows,
                 Offset = offset,
-                HasMore = rows.Count >= limit,
+                HasMore = hasMore,
                 ElapsedMilliseconds = stopwatch.ElapsedMilliseconds,
             };
         }, ct);
 
     public Task<long> CountVoicesAsync(VoiceQuery query, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             var where = BuildWhere(command, query.Kinds, query.Instance, query.Language, query.Search, false, "t");
@@ -344,7 +352,7 @@ public sealed class ContentQueryService
         int previewLength,
         InstanceFilter instance,
         CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<ParallelLine>>(() =>
+        => SqliteAccess.Run<IReadOnlyList<ParallelLine>>(() =>
         {
             var split = alignmentKey.IndexOf(':');
             if (split <= 0)
@@ -362,7 +370,7 @@ public sealed class ContentQueryService
             Dictionary<string, (string Text, string Source)> found;
             try
             {
-                using var connection = SqliteAccess.Open(DatabasePath);
+                using var connection = SqliteAccess.Open(DatabasePath, ct);
                 ct.ThrowIfCancellationRequested();
 
                 var sources = SourceModel.PrimarySourcesFor(instance);
@@ -370,8 +378,11 @@ public sealed class ContentQueryService
                 using var command = connection.CreateCommand();
                 var keyPlaceholders = SqliteAccess.Placeholders(keys, "@k");
                 var sourcePlaceholders = SqliteAccess.Placeholders(sources, "@s");
+                var textProjection = previewLength > 0 ? "substr(CAST(text AS BLOB), 1, @preview)" : "text";
+                if (previewLength > 0)
+                    command.Parameters.AddWithValue("@preview", 4L * (previewLength + 1L));
                 command.CommandText =
-                    $"SELECT language, text, source FROM web_pages WHERE canonical_key IN ({keyPlaceholders}) " +
+                    $"SELECT language, {textProjection}, source FROM web_pages WHERE canonical_key IN ({keyPlaceholders}) " +
                     $"AND source IN ({sourcePlaceholders})";
                 SqliteAccess.BindList(command, keys, "@k");
                 SqliteAccess.BindList(command, sources, "@s");
@@ -382,7 +393,10 @@ public sealed class ContentQueryService
                     while (reader.Read())
                     {
                         var language = reader.GetString(0);
-                        var text = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                        // Bound UTF-8 bytes before crossing into managed memory; SQLite
+                        // substr(TEXT) would silently lose content after an embedded NUL.
+                        var text = reader.IsDBNull(1) ? string.Empty : previewLength > 0
+                            ? Encoding.UTF8.GetString((byte[])reader.GetValue(1)) : reader.GetString(1);
                         var source = reader.GetString(2);
                         if (found.TryGetValue(language, out var existing))
                         {
@@ -403,6 +417,10 @@ public sealed class ContentQueryService
             {
                 // 被新查询取代不是「读取失败」，原样上抛，由调用方丢弃结果。
                 throw;
+            }
+            catch (Exception) when (ct.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(ct);
             }
             catch (Exception ex)
             {

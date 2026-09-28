@@ -17,11 +17,11 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
-    <!-- 与上游 sekaisync 主仓 pyproject.toml 的 version 对齐（0.4.0-alpha）。
+    <!-- 与上游 sekaisync 主仓 pyproject.toml 的 version 对齐（0.4.1-alpha）。
          界面显示走 AppEnvironment.ProductVersion，从这里取 InformationalVersion。 -->
-    <Version>0.4.0-alpha</Version>
-    <Product>SekaiSync Desktop</Product>
-    <AssemblyTitle>SekaiSync Desktop</AssemblyTitle>
+    <Version>0.4.1-alpha</Version>
+    <Product>SekaiSync Desktop for Windows</Product>
+    <AssemblyTitle>SekaiSync Desktop for Windows</AssemblyTitle>
     <!-- 二进制文件图标：ApplicationIcon 写进 PE 资源，资源管理器/任务栏才显示应用图标。 -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>

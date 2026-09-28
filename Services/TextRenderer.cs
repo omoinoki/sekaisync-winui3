@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using SekaiSync.Desktop.Models;
 
 namespace SekaiSync.Desktop.Services;
@@ -22,11 +23,14 @@ public static class TextRenderer
     private static readonly char[] SpeakerSeparators = ['：', ':'];
 
     /// <summary>按 kind / overlay 选择规则拆对白。</summary>
-    public static IReadOnlyList<DialogueBlock> ParseDialogue(string text, bool overlay) =>
-        overlay ? ParseOverlayDialogue(text) : ParsePrefixedDialogue(text);
+    public static IReadOnlyList<DialogueBlock> ParseDialogue(string text, bool overlay, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return overlay ? ParseOverlayDialogue(text, ct) : ParsePrefixedDialogue(text, ct);
+    }
 
     /// <summary>overlay = 0：「角色名：台词」。续行（无冒号）追加到上一条。</summary>
-    private static List<DialogueBlock> ParsePrefixedDialogue(string text)
+    private static List<DialogueBlock> ParsePrefixedDialogue(string text, CancellationToken ct)
     {
         var blocks = new List<DialogueBlock>();
         if (string.IsNullOrWhiteSpace(text))
@@ -47,8 +51,9 @@ public static class TextRenderer
             buffer.Clear();
         }
 
-        foreach (var raw in SplitLines(text))
+        foreach (var raw in SplitLines(text, ct))
         {
+            ct.ThrowIfCancellationRequested();
             if (TrySplitSpeaker(raw, out var name, out var rest))
             {
                 Flush();
@@ -71,7 +76,7 @@ public static class TextRenderer
     }
 
     /// <summary>overlay = 1：说话人单独成行。整行没有任何标点、且足够短，才算说话人。</summary>
-    private static List<DialogueBlock> ParseOverlayDialogue(string text)
+    private static List<DialogueBlock> ParseOverlayDialogue(string text, CancellationToken ct)
     {
         var blocks = new List<DialogueBlock>();
         if (string.IsNullOrWhiteSpace(text))
@@ -92,8 +97,9 @@ public static class TextRenderer
             buffer.Clear();
         }
 
-        foreach (var raw in SplitLines(text))
+        foreach (var raw in SplitLines(text, ct))
         {
+            ct.ThrowIfCancellationRequested();
             if (IsStandaloneSpeaker(raw))
             {
                 Flush();
@@ -170,8 +176,21 @@ public static class TextRenderer
         return name.Any(char.IsLetter);
     }
 
-    private static IEnumerable<string> SplitLines(string text) =>
-        text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+    // Yield one line at a time; Replace + Split previously duplicated whole books
+    // and allocated an array containing every line even for FirstSpeaker().
+    private static IEnumerable<string> SplitLines(string text, CancellationToken ct = default)
+    {
+        var start = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if ((i & 4095) == 0) ct.ThrowIfCancellationRequested();
+            if (text[i] is not ('\r' or '\n')) continue;
+            yield return text[start..i];
+            if (text[i] == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
+            start = i + 1;
+        }
+        yield return text[start..];
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // names_json

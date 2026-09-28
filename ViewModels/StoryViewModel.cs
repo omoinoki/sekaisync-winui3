@@ -600,13 +600,14 @@ public partial class StoryViewModel : ObservableObject
 
         try
         {
-            _total = await _content.CountStoriesAsync(query, cts.Token);
+            var total = await _content.CountStoriesAsync(query, cts.Token);
             var page = await _content.QueryStoriesAsync(query, offset, PageSize, cts.Token);
             if (cts.IsCancellationRequested)
             {
                 return;
             }
 
+            _total = total;
             _offset = page.Offset;
             var keepSource = SelectedItem?.Source;
             var keepId = SelectedItem?.Id;
@@ -632,6 +633,7 @@ public partial class StoryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (cts.IsCancellationRequested) return;
             // 读取失败不能长得像「没有数据」：清掉旧行（它们属于上一个条件），
             // 并在列表区给一条带原因的失败态（S-6）。
             ReplaceItems([]);
@@ -744,6 +746,7 @@ public partial class StoryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (cts.IsCancellationRequested) return;
             _detailFailure = $"{DiagnosticText.Redact(ex.Message)}\n请重试或刷新列表。";
         }
         finally
@@ -785,9 +788,7 @@ public partial class StoryViewModel : ObservableObject
                 ? lines.Where(l => l.Language is "ja" or "zh_hans")
                 : lines).ToList();
 
-            foreach (var line in wanted)
-            {
-                Columns.Add(new ParallelColumn
+            var parsed = await Task.Run(() => wanted.Select(line => new ParallelColumn
                 {
                     RegionLabel = line.RegionLabel,
                     Language = line.Language,
@@ -797,9 +798,10 @@ public partial class StoryViewModel : ObservableObject
                     MissingSubject = "这一话",
                     Blocks = line.Missing
                         ? []
-                        : TextRenderer.ParseDialogue(line.Text, overlay: false),
-                });
-            }
+                        : TextRenderer.ParseDialogue(line.Text, overlay: false, cts.Token),
+                }).ToList(), cts.Token);
+            if (cts.IsCancellationRequested || !ReferenceEquals(SelectedItem, row)) return;
+            foreach (var column in parsed) Columns.Add(column);
 
             if (wanted.Any(l => l.MissingReason == ParallelMissingReason.ReadFailed))
             {
@@ -816,6 +818,7 @@ public partial class StoryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (cts.IsCancellationRequested) return;
             // 兜底：服务层已把失败转成 ReadFailed 占位栏，这里只兜住意外，绝不留空白区。
             App.Log($"StoryViewModel: 对照刷新失败：{ex.Message}");
             foreach (var region in SourceModel.Regions)

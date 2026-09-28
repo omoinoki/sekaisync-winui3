@@ -50,9 +50,9 @@ public sealed class CatalogQueryService
     // ─────────────────────────────────────────────────────────────────────────
 
     public Task<IReadOnlyList<EntityDomain>> LoadEntityDomainsAsync(CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<EntityDomain>>(() =>
+        => SqliteAccess.Run<IReadOnlyList<EntityDomain>>(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             var counts = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -62,6 +62,7 @@ public sealed class CatalogQueryService
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     counts[reader.GetString(0)] = reader.GetInt64(1);
                 }
             }
@@ -102,10 +103,10 @@ public sealed class CatalogQueryService
     }
 
     public Task<EntityScopeTotals> LoadEntityScopeTotalsAsync(CancellationToken ct = default)
-        => Task.Run<EntityScopeTotals>(() =>
+        => SqliteAccess.Run<EntityScopeTotals>(() =>
         {
             var mapped = DomainMap.SelectMany(d => d.Types).ToList();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             long totalRows;
@@ -166,14 +167,14 @@ public sealed class CatalogQueryService
     }
 
     public Task<EntityContext> ReadEntityContextAsync(string id, CancellationToken ct = default)
-        => Task.Run<EntityContext>(() =>
+        => SqliteAccess.Run<EntityContext>(() =>
         {
             if (string.IsNullOrEmpty(id))
             {
                 return new EntityContext();
             }
 
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText =
@@ -205,17 +206,18 @@ public sealed class CatalogQueryService
     public Task<PagedResult<EntityRow>> QueryEntitiesAsync(
         IReadOnlyList<string> types, string search, int offset, int limit,
         bool nameOnly = false, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
+            SqliteAccess.ValidatePage(offset, limit);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             var where = BuildEntityWhere(command, types, search, nameOnly);
             command.CommandText =
                 "SELECT id, type, region, names_json, facts_json, source, trust FROM entities " +
                 $"WHERE {where} ORDER BY id LIMIT @limit OFFSET @offset";
-            command.Parameters.AddWithValue("@limit", limit);
+            command.Parameters.AddWithValue("@limit", limit + 1);
             command.Parameters.AddWithValue("@offset", offset);
 
             var rows = new List<EntityRow>(limit);
@@ -223,6 +225,7 @@ public sealed class CatalogQueryService
             {
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     var id = reader.GetString(0);
                     var type = reader.GetString(1);
                     var region = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
@@ -244,28 +247,30 @@ public sealed class CatalogQueryService
                         FactsJson = reader.IsDBNull(4) ? "{}" : reader.GetString(4),
                     });
 
-                    if (rows.Count >= limit)
+                    if (rows.Count > limit)
                     {
                         break;
                     }
                 }
             }
 
+            var hasMore = rows.Count > limit;
+            if (hasMore) rows.RemoveAt(rows.Count - 1);
             stopwatch.Stop();
             return new PagedResult<EntityRow>
             {
                 Items = rows,
                 Offset = offset,
-                HasMore = rows.Count >= limit,
+                HasMore = hasMore,
                 ElapsedMilliseconds = stopwatch.ElapsedMilliseconds,
             };
         }, ct);
 
     public Task<long> CountEntitiesAsync(
         IReadOnlyList<string> types, string search, bool nameOnly = false, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             var where = BuildEntityWhere(command, types, search, nameOnly);
@@ -302,10 +307,10 @@ public sealed class CatalogQueryService
     // ─────────────────────────────────────────────────────────────────────────
 
     public Task<IReadOnlyList<MetaEntry>> LoadMetaAsync(CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<MetaEntry>>(() =>
+        => SqliteAccess.Run<IReadOnlyList<MetaEntry>>(() =>
         {
             var list = new List<MetaEntry>();
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT key, value FROM meta ORDER BY key";
@@ -330,9 +335,9 @@ public sealed class CatalogQueryService
     /// —— seq 是写入序号，和 crawled_at 单调一致，这样避免对 75 万行做全表扫描。
     /// </summary>
     public Task<IReadOnlyList<SourceStats>> LoadSourceStatsAsync(CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<SourceStats>>(() =>
+        => SqliteAccess.Run<IReadOnlyList<SourceStats>>(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             var rows = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -342,6 +347,7 @@ public sealed class CatalogQueryService
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     rows[reader.GetString(0)] = reader.GetInt64(1);
                 }
             }
@@ -357,6 +363,7 @@ public sealed class CatalogQueryService
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     var source = reader.GetString(0);
                     if (!coverage.TryGetValue(source, out var set))
                     {
@@ -432,9 +439,9 @@ public sealed class CatalogQueryService
     /// </summary>
     public Task<(CompareSummary Summary, IReadOnlyList<CompareRow> Rows)> CompareAsync(
         IReadOnlyList<string> kinds, int sampleLimit, CancellationToken ct = default)
-        => Task.Run(() =>
+        => SqliteAccess.Run(() =>
         {
-            using var connection = SqliteAccess.Open(DatabasePath);
+            using var connection = SqliteAccess.Open(DatabasePath, ct);
             ct.ThrowIfCancellationRequested();
 
             var kindPlaceholders = SqliteAccess.Placeholders(kinds, "@k");
@@ -500,6 +507,7 @@ ORDER BY a.source, a.id LIMIT @limit";
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
+                    ct.ThrowIfCancellationRequested();
                     var crawlerAt = reader.IsDBNull(3) ? string.Empty : reader.GetString(3);
                     rows.Add(new CompareRow
                     {
